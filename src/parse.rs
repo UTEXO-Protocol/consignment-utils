@@ -347,3 +347,55 @@ fn fungible_entry<Seal: ExposedSeal>(a: &Assign<rgbstd::RevealedValue, Seal>) ->
 
     FungibleEntry { amount, seal }
 }
+
+#[cfg(test)]
+mod tests {
+    use amplify::confinement::{Confined, SmallBlob};
+    use rgbstd::RevealedData;
+    use rgbstd::containers::{Contract, FileContent};
+    use rgbstd::schema::{GlobalDetails, GlobalStateSchema};
+    use strict_types::encoding::StrictDumb;
+
+    use super::*;
+
+    // Make a contract file. Its precision is a signed byte, and 0xff is the value -1.
+    fn contract_with_signed_precision() -> Vec<u8> {
+        let sem_id = Ty::<SemId>::I8.sem_id_unnamed();
+        let state_type = GlobalStateType::with(GS_PRECISION);
+
+        let mut contract = Contract::strict_dumb();
+        contract.types = TypeSystem::from_inner(Confined::from_checked([(sem_id, Ty::I8)].into()));
+        contract
+            .schema
+            .global_types
+            .insert(
+                state_type,
+                GlobalDetails {
+                    global_state_schema: GlobalStateSchema::once(sem_id),
+                    name: FieldName::from("precision"),
+                },
+            )
+            .unwrap();
+        contract
+            .genesis
+            .globals
+            .add_state(
+                state_type,
+                RevealedData::new(SmallBlob::from_checked(vec![0xff])),
+            )
+            .unwrap();
+
+        let mut bytes = Vec::new();
+        contract.save(&mut bytes).unwrap();
+        bytes
+    }
+
+    #[test]
+    fn signed_precision_does_not_crash_the_parser() {
+        let info = parse(&contract_with_signed_precision()).unwrap();
+        let ConsignmentInfo::Contract(contract) = info else {
+            panic!("the file is a contract");
+        };
+        assert_eq!(contract.genesis.precision, None);
+    }
+}
