@@ -2,7 +2,7 @@ use amplify::Wrapper;
 use rgbstd::containers::{Consignment, ConsignmentExt, Kit, UniversalFile};
 use rgbstd::schema::GlobalStateType;
 use rgbstd::{Assign, Assignments, ExposedSeal, KnownTransition, Transition, TypedAssigns};
-use strict_types::value::{EnumTag, StrictVal};
+use strict_types::value::{EnumTag, StrictNum, StrictVal};
 use strict_types::{FieldName, SemId, Ty, TypeSystem, VariantName};
 
 use crate::info::{
@@ -290,7 +290,7 @@ fn enum_val_to_ord(types: &TypeSystem, v: &StrictVal, sem_id: SemId) -> Option<u
             Ty::Enum(variants) => variants.tag_by_name(name),
             _ => resolve_variant_name(types, sem_id, name),
         },
-        StrictVal::Number(n) => u8::try_from(n.unwrap_uint::<u64>()).ok(),
+        StrictVal::Number(StrictNum::Uint(n)) => u8::try_from(*n).ok(),
         _ => None,
     }
 }
@@ -346,4 +346,16 @@ fn fungible_entry<Seal: ExposedSeal>(a: &Assign<rgbstd::RevealedValue, Seal>) ->
     };
 
     FungibleEntry { amount, seal }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signed_precision_does_not_crash_the_parser() {
+        let types = TypeSystem::default();
+        let v = StrictVal::num(-1i8);
+        assert_eq!(enum_val_to_ord(&types, &v, SemId::default()), None);
+    }
 }
