@@ -22,4 +22,4 @@ pub use info::{
     ConsignmentInfo, ConsignmentKind, ContractInfo, FungibleAllocation, FungibleEntry, GenesisInfo,
     KitInfo, SealInfo, TerminalInfo, TransferInfo, TransitionInfo, WitnessInfo,
 };
-pub use parse::{parse, ParseError};
+pub use parse::{ParseError, parse};

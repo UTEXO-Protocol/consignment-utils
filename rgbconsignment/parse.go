@@ -12,6 +12,7 @@ package rgbconsignment
 #cgo linux,amd64  LDFLAGS: ${SRCDIR}/lib/linux_amd64/librgb_consignment.a
 #cgo darwin LDFLAGS: -framework CoreFoundation -framework Security -liconv
 #cgo linux LDFLAGS: -ldl -lm -lpthread
+#include <string.h>
 #include "rgb_consignment.h"
 */
 import "C"
@@ -47,8 +48,11 @@ func Parse(data []byte) (*Info, error) {
 	}
 	defer C.rgb_consignment_string_free(raw)
 
+	// One strlen and one copy: GoBytes lands directly in the []byte Unmarshal takes.
+	buf := C.GoBytes(unsafe.Pointer(raw), C.int(C.strlen(raw)))
+
 	var info Info
-	if err := json.Unmarshal([]byte(C.GoString(raw)), &info); err != nil {
+	if err := json.Unmarshal(buf, &info); err != nil {
 		return nil, fmt.Errorf("rgb consignment: decode json: %w", err)
 	}
 	return &info, nil

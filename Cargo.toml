@@ -42,7 +42,16 @@ thiserror.workspace = true
 name = "rgb-consignment"
 required-features = ["cli"]
 
-# `panic = "unwind"` (the default) is required for the C ABI: it converts
-# panics into error strings via catch_unwind instead of aborting the host.
 [profile.release]
 strip = "debuginfo"
+
+# Profile for the static archive shipped with the Go binding
+# (scripts/build-lib.sh). LTO only takes effect when the staticlib is the sole
+# crate type, hence `cargo rustc --crate-type staticlib` there; it internalises
+# everything except the C ABI and drops the rest (56 MB -> ~11 MB). Thin LTO
+# builds in ~1.5 min; fat saves another 2 MB but takes ~15 min.
+# `panic = "unwind"` (the default) must stay: the C ABI turns panics into
+# error strings via catch_unwind instead of aborting the host process.
+[profile.lib]
+inherits = "release"
+lto = "thin"

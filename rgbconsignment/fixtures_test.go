@@ -1,6 +1,7 @@
 package rgbconsignment
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -75,7 +76,7 @@ func TestParseFileIFAContract(t *testing.T) {
 }
 
 func TestParseRejectsTruncatedFixture(t *testing.T) {
-	data, err := readFixture(ifaFixture)
+	data, err := os.ReadFile(filepath.FromSlash(ifaFixture))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +86,7 @@ func TestParseRejectsTruncatedFixture(t *testing.T) {
 }
 
 func BenchmarkParseIFAContract(b *testing.B) {
-	data, err := readFixture(ifaFixture)
+	data, err := os.ReadFile(filepath.FromSlash(ifaFixture))
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -12,6 +12,11 @@ const (
 // Info is the flat summary returned by Parse. Transfer and Contract share
 // the same fields; Kit only fills Version / SchemaCount / ScriptCount /
 // TypesCount.
+//
+// Info is a decode target for the parser's JSON, not a wire format of its
+// own: fields the Rust side requires per kind are marked omitempty so one Go
+// struct can hold every kind, so re-marshaling an Info is not guaranteed to
+// deserialize back into the Rust ConsignmentInfo.
 type Info struct {
 	Kind Kind `json:"kind"`
 
@@ -68,7 +73,7 @@ const (
 type Seal struct {
 	Kind       SealKind `json:"kind"`
 	Txid       *string  `json:"txid,omitempty"`
-	Vout       uint32   `json:"vout,omitempty"`
+	Vout       uint32   `json:"vout"`
 	SecretSeal string   `json:"secret_seal,omitempty"`
 }
 

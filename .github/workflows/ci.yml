@@ -2,66 +2,106 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
     tags: ["v*"]
   pull_request:
+
+# The Go binding links rgbconsignment/lib/<GOOS>_<GOARCH>/librgb_consignment.a,
+# and those archives are committed so that `go get` works without a Rust
+# toolchain. `libs` rebuilds all four whenever the Rust side changes and
+# `commit-libs` pushes them back to the branch; `test` runs against whatever
+# archive is committed.
 
 jobs:
   test:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-24.04
-            platform: linux_amd64
-          - os: ubuntu-24.04-arm
-            platform: linux_arm64
-          - os: macos-15
-            platform: darwin_arm64
-          - os: macos-15-large
-            platform: darwin_amd64
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
-      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo test
+      - run: go vet ./rgbconsignment && go test ./rgbconsignment
 
-      - name: Rust tests
-        run: cargo test
-
-      - name: Build static library
-        run: ./scripts/build-lib.sh
-
-      - name: Go tests
-        run: go vet ./rgbconsignment && go test ./rgbconsignment
-
-      - name: Upload static library
+  libs:
+    # Only the Rust side changes the archive; skip on Go/doc-only pushes.
+    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            targets: "x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu"
+          - os: macos-15
+            targets: "aarch64-apple-darwin x86_64-apple-darwin"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tj-actions/changed-files@v45
+        id: rust
+        with:
+          files: |
+            src/**
+            Cargo.toml
+            Cargo.lock
+            scripts/build-lib.sh
+      - if: steps.rust.outputs.any_changed == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+      - if: steps.rust.outputs.any_changed == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: lib-${{ matrix.os }}
+      - if: steps.rust.outputs.any_changed == 'true' && runner.os == 'Linux'
+        name: Cross toolchain for aarch64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          {
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc"
+            echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc"
+            echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar"
+          } >> "$GITHUB_ENV"
+      - if: steps.rust.outputs.any_changed == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - if: steps.rust.outputs.any_changed == 'true'
+        name: Build archives
+        run: |
+          for t in ${{ matrix.targets }}; do ./scripts/build-lib.sh "$t"; done
+      - if: steps.rust.outputs.any_changed == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: librgb_consignment-${{ matrix.platform }}
-          path: rgbconsignment/lib/${{ matrix.platform }}/librgb_consignment.a
+          name: libs-${{ matrix.os }}
+          path: rgbconsignment/lib/*/librgb_consignment.a
           if-no-files-found: error
 
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: test
+  commit-libs:
+    needs: libs
+    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
-      - name: Package archives
-        run: |
-          set -eu
-          cd artifacts
-          for d in librgb_consignment-*; do
-            tar -C "$d" -czf "../$d.tar.gz" librgb_consignment.a
-          done
-      - uses: softprops/action-gh-release@v2
+          pattern: libs-*
+          path: rgbconsignment/lib
+          merge-multiple: true
+      - name: Commit rebuilt archives
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          files: artifacts/*.tar.gz
+          commit_message: "chore: rebuild static archives [skip ci]"
+          file_pattern: rgbconsignment/lib/*/librgb_consignment.a

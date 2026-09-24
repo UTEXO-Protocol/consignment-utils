@@ -27,18 +27,23 @@ for _, w := range info.Witnesses {
 ```
 
 The Go package links `rgbconsignment/lib/<GOOS>_<GOARCH>/librgb_consignment.a`
-statically, so the resulting binary has no runtime dependency on Rust. The
-archive is built by `scripts/build-lib.sh` (or `make rust`) and is **not**
-committed; CI builds one per platform and attaches them to tagged releases.
+statically, so `go get` needs no Rust toolchain and the resulting binary has no
+runtime dependency on a shared library. The archives are committed (about
+11 MB each, LTO-stripped to the two exported symbols) for `darwin_arm64`,
+`darwin_amd64`, `linux_arm64` and `linux_amd64`.
 
-To use the module locally, build the archive for your host first:
+After changing the Rust side, rebuild the host archive with `make rust`
+(`scripts/build-lib.sh <target>` cross-compiles the others); CI rebuilds all
+four on push and commits them back to the branch, so a local rebuild is only
+needed to test.
 
 ```sh
-make rust          # cargo build --release --lib --no-default-features + copy
+make rust          # host archive via cargo rustc --profile lib --crate-type staticlib
 make test          # cargo test + go test ./rgbconsignment
 ```
 
-Supported targets: `darwin_arm64`, `darwin_amd64`, `linux_arm64`, `linux_amd64`.
+Linking two Rust static archives into one Go binary can clash on Rust runtime
+symbols; this archive exports its Rust runtime like any other staticlib.
 
 ### C ABI
 

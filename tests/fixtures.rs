@@ -8,7 +8,8 @@ use rgb_consignment::{ConsignmentInfo, ConsignmentKind, SealInfo, parse};
 const IFA_CONTRACT: &[u8] = include_bytes!("../testdata/ifa-contract.rgb");
 
 unsafe extern "C" {
-    fn rgb_consignment_parse(data: *const u8, len: usize, err_out: *mut *mut c_char) -> *mut c_char;
+    fn rgb_consignment_parse(data: *const u8, len: usize, err_out: *mut *mut c_char)
+    -> *mut c_char;
     fn rgb_consignment_string_free(s: *mut c_char);
 }
 
@@ -21,7 +22,10 @@ fn ifa_contract_parses() {
         panic!("expected contract");
     };
     let g = &c.genesis;
-    assert_eq!(g.contract_id, "rgb:jpyfP_3m-zroPnJm-2J9qFHO-7ZjimUC-yH4A96u-oHthc64");
+    assert_eq!(
+        g.contract_id,
+        "rgb:jpyfP_3m-zroPnJm-2J9qFHO-7ZjimUC-yH4A96u-oHthc64"
+    );
     assert_eq!(g.chain_net, "tb4");
     assert_eq!(g.timestamp, 1768417034);
     assert_eq!(g.name.as_deref(), Some("Test asset"));
@@ -38,7 +42,10 @@ fn ifa_contract_parses() {
     assert_eq!(a.entries.len(), 1);
     match &a.entries[0].seal {
         SealInfo::Revealed { txid, vout } => {
-            assert_eq!(txid.as_deref(), Some("14295d5bb1a191cdb6286dc0944df938421e3dfcbf0811353ccac4100c2068c5"));
+            assert_eq!(
+                txid.as_deref(),
+                Some("14295d5bb1a191cdb6286dc0944df938421e3dfcbf0811353ccac4100c2068c5")
+            );
             assert_eq!(*vout, 1);
         }
         other => panic!("unexpected seal {other:?}"),
@@ -57,8 +64,13 @@ fn ifa_contract_parses() {
 #[test]
 fn ifa_contract_via_c_abi() {
     let mut err = ptr::null_mut();
-    let json = unsafe { rgb_consignment_parse(IFA_CONTRACT.as_ptr(), IFA_CONTRACT.len(), &mut err) };
-    assert!(err.is_null(), "unexpected error: {}", unsafe { CStr::from_ptr(err) }.to_string_lossy());
+    let json =
+        unsafe { rgb_consignment_parse(IFA_CONTRACT.as_ptr(), IFA_CONTRACT.len(), &mut err) };
+    assert!(
+        err.is_null(),
+        "unexpected error: {}",
+        unsafe { CStr::from_ptr(err) }.to_string_lossy()
+    );
     assert!(!json.is_null());
 
     let text = unsafe { CStr::from_ptr(json) }.to_str().unwrap().to_owned();

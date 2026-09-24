@@ -3,38 +3,39 @@
 //! `rgb_consignment_parse` accepts a binary consignment and returns a
 //! newly-allocated JSON document matching [`crate::ConsignmentInfo`].
 
-use std::ffi::{c_char, CString};
+use std::ffi::{CString, c_char};
 use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
 
 /// Parse a binary RGB consignment and return a newly allocated JSON C string.
 ///
 /// On success `*err_out` is set to null. On failure the return value is null
-/// and `*err_out` is a newly allocated error message.
+/// and `*err_out` is a newly allocated error message. `err_out` may be null
+/// when the caller does not need the message.
 ///
 /// Both strings must be freed with [`rgb_consignment_string_free`].
 ///
 /// # Safety
 ///
 /// * `data` must be valid for `len` bytes, or `data` may be null when `len` is 0.
-/// * `err_out` must be a valid writable pointer.
+/// * `err_out` must be null or a valid writable pointer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rgb_consignment_parse(
     data: *const u8,
     len: usize,
     err_out: *mut *mut c_char,
 ) -> *mut c_char {
-    if err_out.is_null() {
-        return ptr::null_mut();
-    }
-    unsafe {
-        *err_out = ptr::null_mut();
-    }
+    let set_err = |msg: &str| {
+        if !err_out.is_null() {
+            unsafe {
+                *err_out = to_cstring(msg);
+            }
+        }
+    };
+    set_err_null(err_out);
 
     if data.is_null() && len != 0 {
-        unsafe {
-            *err_out = to_cstring("null data pointer");
-        }
+        set_err("null data pointer");
         return ptr::null_mut();
     }
 
@@ -51,9 +52,7 @@ pub unsafe extern "C" fn rgb_consignment_parse(
     match result {
         Ok(Ok(json)) => to_cstring(&json),
         Ok(Err(msg)) => {
-            unsafe {
-                *err_out = to_cstring(&msg);
-            }
+            set_err(&msg);
             ptr::null_mut()
         }
         Err(payload) => {
@@ -62,10 +61,16 @@ pub unsafe extern "C" fn rgb_consignment_parse(
                 .map(|s| s.to_string())
                 .or_else(|| payload.downcast_ref::<String>().cloned())
                 .unwrap_or_else(|| "unknown panic".to_string());
-            unsafe {
-                *err_out = to_cstring(&format!("internal error (panic): {msg}"));
-            }
+            set_err(&format!("internal error (panic): {msg}"));
             ptr::null_mut()
+        }
+    }
+}
+
+fn set_err_null(err_out: *mut *mut c_char) {
+    if !err_out.is_null() {
+        unsafe {
+            *err_out = ptr::null_mut();
         }
     }
 }
@@ -113,9 +118,15 @@ mod tests {
     }
 
     #[test]
-    fn null_err_out_returns_null() {
+    fn null_err_out_is_accepted() {
         let data = b"nope";
         let json = unsafe { rgb_consignment_parse(data.as_ptr(), data.len(), ptr::null_mut()) };
-        assert!(json.is_null());
+        assert!(json.is_null(), "garbage still fails without an err_out");
+
+        let fixture = include_bytes!("../testdata/ifa-contract.rgb");
+        let json =
+            unsafe { rgb_consignment_parse(fixture.as_ptr(), fixture.len(), ptr::null_mut()) };
+        assert!(!json.is_null(), "valid input must parse without an err_out");
+        unsafe { rgb_consignment_string_free(json) };
     }
 }
