@@ -177,3 +177,40 @@ pub struct WitnessInfo {
     /// State transitions in this bundle, with their fungible outputs.
     pub transitions: Vec<TransitionInfo>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transfer_json_uses_internally_tagged_kind() {
+        let info = ConsignmentInfo::Transfer(TransferInfo {
+            version: 3,
+            genesis: GenesisInfo {
+                contract_id: "c".into(),
+                schema_id: "s".into(),
+                chain_net: "bc".into(),
+                timestamp: 1,
+                issuer: String::new(),
+                ffv: "RGB/1.0".into(),
+                global_state_count: 0,
+                assignment_count: 0,
+                fungible_allocations: vec![],
+                name: Some("Name".into()),
+                ticker: Some("TKN".into()),
+                precision: Some(8),
+                details: None,
+            },
+            schema_id: "s".into(),
+            terminals: vec![],
+            witnesses: vec![],
+            bundle_count: 0,
+            script_count: 0,
+            types_count: 0,
+        });
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains(r#""kind":"transfer""#), "{json}");
+        assert!(json.contains(r#""ticker":"TKN""#), "{json}");
+        assert!(!json.contains("details"), "{json}");
+    }
+}
