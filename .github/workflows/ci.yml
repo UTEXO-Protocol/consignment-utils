@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux_amd64
+          - os: ubuntu-24.04-arm
+            platform: linux_arm64
+          - os: macos-15
+            platform: darwin_arm64
+          - os: macos-15-large
+            platform: darwin_amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Rust tests
+        run: cargo test
+
+      - name: Build static library
+        run: ./scripts/build-lib.sh
+
+      - name: Go tests
+        run: go vet ./rgbconsignment && go test ./rgbconsignment
+
+      - name: Upload static library
+        uses: actions/upload-artifact@v4
+        with:
+          name: librgb_consignment-${{ matrix.platform }}
+          path: rgbconsignment/lib/${{ matrix.platform }}/librgb_consignment.a
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Package archives
+        run: |
+          set -eu
+          cd artifacts
+          for d in librgb_consignment-*; do
+            tar -C "$d" -czf "../$d.tar.gz" librgb_consignment.a
+          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.tar.gz
