@@ -10,7 +10,11 @@
 //! let info = rgb_consignment::parse(&bytes).unwrap();
 //! println!("{}", serde_json::to_string_pretty(&info).unwrap());
 //! ```
+//!
+//! A C ABI (`rgb_consignment_parse`) is exported for language bindings.
+//! The Go wrapper lives in `rgbconsignment`.
 
+mod ffi;
 mod info;
 mod parse;
 
