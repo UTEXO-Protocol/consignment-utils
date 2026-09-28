@@ -156,6 +156,20 @@ pub struct TransitionInfo {
     /// Outputs grouped by assignment type. Empty if the transition only
     /// moves declarative or structured (non-fungible) state.
     pub fungible_allocations: Vec<FungibleAllocation>,
+    /// Schema-defined metadata carried by the transition (e.g. BFA
+    /// `MS_BURNED_ASSET` = 1001, `MS_BURN_RECIPIENT` = 1003), raw
+    /// strict-encoded bytes as lowercase hex. Empty when there is none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub metadata: Vec<MetaEntry>,
+}
+
+/// One metadata field of a transition.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MetaEntry {
+    /// Schema-defined metadata type id.
+    pub meta_type: u16,
+    /// Raw strict-encoded value, lowercase hex without prefix.
+    pub value_hex: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -212,5 +226,38 @@ mod tests {
         assert!(json.contains(r#""kind":"transfer""#), "{json}");
         assert!(json.contains(r#""ticker":"TKN""#), "{json}");
         assert!(!json.contains("details"), "{json}");
+    }
+
+    #[test]
+    fn transition_metadata_round_trips_and_is_omitted_when_empty() {
+        let mut t = TransitionInfo {
+            op_id: "op".into(),
+            transition_type: 8010,
+            input_count: 1,
+            fungible_allocations: vec![],
+            metadata: vec![],
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(!json.contains("metadata"), "{json}");
+        let back: TransitionInfo = serde_json::from_str(&json).unwrap();
+        assert!(back.metadata.is_empty());
+
+        t.metadata = vec![
+            MetaEntry {
+                meta_type: 1001,
+                value_hex: "1027000000000000".into(),
+            },
+            MetaEntry {
+                meta_type: 1003,
+                value_hex: "00".repeat(12) + &"ab".repeat(20),
+            },
+        ];
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(
+            json.contains(r#""meta_type":1001,"value_hex":"1027000000000000""#),
+            "{json}"
+        );
+        let back: TransitionInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.metadata, t.metadata);
     }
 }

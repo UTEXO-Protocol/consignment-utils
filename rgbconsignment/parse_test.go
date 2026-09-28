@@ -44,3 +44,32 @@ func TestJSONKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestTransitionMetadataDecodesAndLooksUp(t *testing.T) {
+	raw := `{"op_id":"op","transition_type":8010,"input_count":1,"fungible_allocations":[],` +
+		`"metadata":[{"meta_type":1001,"value_hex":"1027000000000000"},{"meta_type":1003,"value_hex":"` +
+		"000000000000000000000000abababababababababababababababababababab" + `"}]}`
+	var tr TransitionInfo
+	if err := json.Unmarshal([]byte(raw), &tr); err != nil {
+		t.Fatal(err)
+	}
+	amount, ok := tr.Meta(1001)
+	if !ok || len(amount) != 8 || amount[0] != 0x10 || amount[1] != 0x27 {
+		t.Fatalf("MS_BURNED_ASSET bytes = %x, ok=%v", amount, ok)
+	}
+	recipient, ok := tr.Meta(1003)
+	if !ok || len(recipient) != 32 || recipient[12] != 0xab {
+		t.Fatalf("MS_BURN_RECIPIENT bytes = %x, ok=%v", recipient, ok)
+	}
+	if _, ok := tr.Meta(9999); ok {
+		t.Fatal("unknown meta type must not be found")
+	}
+
+	var none TransitionInfo
+	if err := json.Unmarshal([]byte(`{"op_id":"x","transition_type":10000,"input_count":0,"fungible_allocations":[]}`), &none); err != nil {
+		t.Fatal(err)
+	}
+	if len(none.Metadata) != 0 {
+		t.Fatalf("expected no metadata, got %+v", none.Metadata)
+	}
+}

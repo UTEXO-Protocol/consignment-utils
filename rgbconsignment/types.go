@@ -1,5 +1,7 @@
 package rgbconsignment
 
+import "encoding/hex"
+
 // Kind is the top-level consignment container type.
 type Kind string
 
@@ -82,6 +84,31 @@ type TransitionInfo struct {
 	TransitionType      uint16               `json:"transition_type"`
 	InputCount          uint32               `json:"input_count"`
 	FungibleAllocations []FungibleAllocation `json:"fungible_allocations"`
+	// Metadata carries the transition's schema-defined metadata fields
+	// (for BFA: MS_BURNED_ASSET=1001, MS_BURN_RECIPIENT=1003) as raw
+	// strict-encoded bytes. Empty when the transition has none.
+	Metadata []MetaEntry `json:"metadata,omitempty"`
+}
+
+// MetaEntry is one metadata field of a transition.
+type MetaEntry struct {
+	MetaType uint16 `json:"meta_type"`
+	// ValueHex is the raw strict-encoded value, lowercase hex without 0x.
+	ValueHex string `json:"value_hex"`
+}
+
+// Meta returns the raw bytes of the metadata field metaType, if present.
+func (t TransitionInfo) Meta(metaType uint16) ([]byte, bool) {
+	for _, m := range t.Metadata {
+		if m.MetaType == metaType {
+			b, err := hex.DecodeString(m.ValueHex)
+			if err != nil {
+				return nil, false
+			}
+			return b, true
+		}
+	}
+	return nil, false
 }
 
 type TerminalInfo struct {
