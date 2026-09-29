@@ -7,7 +7,7 @@ use strict_types::{FieldName, SemId, Ty, TypeSystem, VariantName};
 
 use crate::info::{
     ConsignmentInfo, ContractInfo, FungibleAllocation, FungibleEntry, GenesisInfo, KitInfo,
-    SealInfo, TerminalInfo, TransferInfo, TransitionInfo, WitnessInfo,
+    MetaEntry, SealInfo, TerminalInfo, TransferInfo, TransitionInfo, WitnessInfo,
 };
 
 // Well-known global-state-type IDs from `rgb-schemas`.
@@ -313,7 +313,25 @@ fn transition_info(kt: &KnownTransition) -> TransitionInfo {
         transition_type: t.transition_type.to_inner(),
         input_count: t.inputs.len() as u32,
         fungible_allocations: fungible_allocations(&t.assignments),
+        metadata: t
+            .metadata
+            .iter()
+            .map(|(ty, value)| MetaEntry {
+                meta_type: ty.to_inner(),
+                value_hex: to_hex(value.as_ref()),
+            })
+            .collect(),
     }
+}
+
+fn to_hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(DIGITS[(b >> 4) as usize] as char);
+        out.push(DIGITS[(b & 0x0f) as usize] as char);
+    }
+    out
 }
 
 fn fungible_allocations<Seal: ExposedSeal>(asgs: &Assignments<Seal>) -> Vec<FungibleAllocation> {

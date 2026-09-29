@@ -19,9 +19,13 @@ serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.115"
 thiserror = "2.0"
 
+[lib]
+name = "rgb_consignment"
+crate-type = ["rlib", "cdylib", "staticlib"]
+
 [features]
 default = ["cli"]
-cli = ["dep:clap", "dep:env_logger", "dep:log", "dep:serde_json"]
+cli = ["dep:clap", "dep:env_logger", "dep:log"]
 
 [dependencies]
 amplify.workspace = true
@@ -31,12 +35,23 @@ log = { workspace = true, optional = true }
 rgb-ops.workspace = true
 rgb-strict-types.workspace = true
 serde.workspace = true
-serde_json = { workspace = true, optional = true }
-thiserror.workspace = true
-
-[dev-dependencies]
 serde_json.workspace = true
+thiserror.workspace = true
 
 [[bin]]
 name = "rgb-consignment"
 required-features = ["cli"]
+
+[profile.release]
+strip = "debuginfo"
+
+# Profile for the static archive shipped with the Go binding
+# (scripts/build-lib.sh). LTO only takes effect when the staticlib is the sole
+# crate type, hence `cargo rustc --crate-type staticlib` there; it internalises
+# everything except the C ABI and drops the rest (56 MB -> ~11 MB). Thin LTO
+# builds in ~1.5 min; fat saves another 2 MB but takes ~15 min.
+# `panic = "unwind"` (the default) must stay: the C ABI turns panics into
+# error strings via catch_unwind instead of aborting the host process.
+[profile.lib]
+inherits = "release"
+lto = "thin"
