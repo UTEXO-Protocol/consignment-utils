@@ -73,10 +73,13 @@ const (
 )
 
 type Seal struct {
-	Kind       SealKind `json:"kind"`
-	Txid       *string  `json:"txid,omitempty"`
-	Vout       uint32   `json:"vout"`
-	SecretSeal string   `json:"secret_seal,omitempty"`
+	Kind SealKind `json:"kind"`
+	Txid *string  `json:"txid,omitempty"`
+	// Vout is present only for revealed seals. A plain uint32 would decode an
+	// absent vout (confidential seals carry none) as 0, inviting consumers to
+	// mistake it for txout 0 — so it is a pointer and omitted when absent.
+	Vout       *uint32 `json:"vout,omitempty"`
+	SecretSeal string  `json:"secret_seal,omitempty"`
 }
 
 type TransitionInfo struct {

@@ -45,6 +45,34 @@ func TestJSONKinds(t *testing.T) {
 	}
 }
 
+func TestConfidentialSealHasNoVout(t *testing.T) {
+	// Rust emits confidential seals without vout; the Go type must not
+	// materialize a phantom vout:0 that consumers could mistake for txout 0.
+	var s Seal
+	if err := json.Unmarshal([]byte(`{"kind":"confidential","secret_seal":"deadbeef"}`), &s); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if s.Kind != SealConfidential || s.Vout != nil {
+		t.Fatalf("got %+v, want confidential seal with nil vout", s)
+	}
+	out, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if json.Valid(out) && containsKey(out, "vout") {
+		t.Fatalf("marshalled confidential seal must omit vout, got %s", out)
+	}
+}
+
+func containsKey(raw []byte, key string) bool {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return false
+	}
+	_, ok := m[key]
+	return ok
+}
+
 func TestTransitionMetadataDecodesAndLooksUp(t *testing.T) {
 	raw := `{"op_id":"op","transition_type":8010,"input_count":1,"fungible_allocations":[],` +
 		`"metadata":[{"meta_type":1001,"value_hex":"1027000000000000"},{"meta_type":1003,"value_hex":"` +

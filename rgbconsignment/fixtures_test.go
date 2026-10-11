@@ -54,7 +54,7 @@ func TestParseFileIFAContract(t *testing.T) {
 		t.Errorf("alloc[0] = %+v", a)
 	}
 	e := a.Entries[0]
-	if e.Amount != 100000 || e.Seal.Kind != SealRevealed || e.Seal.Vout != 1 {
+	if e.Amount != 100000 || e.Seal.Kind != SealRevealed || e.Seal.Vout == nil || *e.Seal.Vout != 1 {
 		t.Errorf("entry[0] = %+v", e)
 	}
 	if e.Seal.Txid == nil || *e.Seal.Txid != "14295d5bb1a191cdb6286dc0944df938421e3dfcbf0811353ccac4100c2068c5" {
