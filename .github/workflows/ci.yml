@@ -42,6 +42,9 @@ jobs:
           - os: macos-15
             targets: "aarch64-apple-darwin x86_64-apple-darwin"
     runs-on: ${{ matrix.os }}
+    # Both legs see the same commit, so either one's answer is the job's.
+    outputs:
+      built: ${{ steps.rust.outputs.any_changed }}
     steps:
       - uses: actions/checkout@v4
       - uses: tj-actions/changed-files@v45
@@ -93,7 +96,8 @@ jobs:
 
   commit-libs:
     needs: libs
-    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+    # Without a rebuild there is nothing to commit; running anyway would delete the archives.
+    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') && needs.libs.outputs.built == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
