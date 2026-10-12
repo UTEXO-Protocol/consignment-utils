@@ -7,14 +7,15 @@ license = "Apache-2.0"
 
 
 [workspace.dependencies]
-amplify = { version = "4.8.1", default-features = false }
+amplify = { version = "=4.8.1", default-features = false }
 clap = { version = "4.5.4", features = ["derive"] }
 env_logger = "0.11.3"
 log = "0.4.21"
-rgb-ops = { version = "0.11.1-rc.10", default-features = false, features = [
+# Exact pins: a caret requirement never moves onto a newer prerelease.
+rgb-ops = { version = "=0.11.2-rc.1", default-features = false, features = [
     "serde",
 ] }
-rgb-strict-types = "1.0.1"
+rgb-strict-types = "=1.0.5"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.115"
 thiserror = "2.0"

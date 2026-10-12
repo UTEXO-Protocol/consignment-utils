@@ -27,7 +27,7 @@ import (
 
 //go:generate ../scripts/build-lib.sh
 
-// Parse decodes a binary RGB consignment (Transfer, Contract, or Kit).
+// Parse decodes a binary RGB V1 consignment (Transfer or Contract, plain or validated).
 func Parse(data []byte) (*Info, error) {
 	var errOut *C.char
 	var ptr *C.uint8_t
