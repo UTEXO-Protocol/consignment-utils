@@ -6,6 +6,7 @@
 
 mod synthetic;
 
+use std::collections::BTreeSet;
 use std::ffi::{CStr, c_char};
 use std::path::PathBuf;
 use std::ptr;
@@ -83,7 +84,9 @@ fn bfa_genesis_exposes_bridge_location() {
     let location = format!("00{}{}", hex(&1u64.to_le_bytes()), "deadbeef".repeat(5));
     let entry = g.globals.iter().find(|e| e.global_type == 3008);
     assert_eq!(entry.map(|e| e.value_hex.as_str()), Some(location.as_str()));
-    assert_eq!(g.globals.len() as u32, g.global_state_count);
+    // The count is of global types; globals has one entry per value.
+    let types: BTreeSet<u16> = g.globals.iter().map(|e| e.global_type).collect();
+    assert_eq!(types.len() as u32, g.global_state_count);
 }
 
 #[test]

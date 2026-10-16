@@ -4,7 +4,7 @@ use rgbstd::containers::{Consignment, WitnessBundle};
 use rgbstd::stl::{AssetSpec, Details, Name};
 use rgbstd::{
     Assign, Assignments, BuilderSeal, ExposedSeal, Genesis, GlobalState, GlobalStateType,
-    KnownTransition, Metadata, Operation, Precision, RevealedValue, TypedAssigns,
+    KnownTransition, Operation, Precision, RevealedValue, TypedAssigns,
 };
 use strict_types::encoding::{StreamReader, StrictDecode, StrictDeserialize};
 
@@ -175,16 +175,6 @@ fn global_entries(globals: &GlobalState) -> Vec<GlobalEntry> {
         .collect()
 }
 
-fn meta_entries(metadata: &Metadata) -> Vec<MetaEntry> {
-    metadata
-        .iter()
-        .map(|(ty, value)| MetaEntry {
-            meta_type: ty.to_inner(),
-            value_hex: to_hex(value.as_ref()),
-        })
-        .collect()
-}
-
 fn transition_info(kt: &KnownTransition) -> TransitionInfo {
     let t = &kt.transition;
     TransitionInfo {
@@ -192,7 +182,14 @@ fn transition_info(kt: &KnownTransition) -> TransitionInfo {
         transition_type: t.transition_type.to_inner(),
         input_count: t.inputs.len() as u32,
         fungible_allocations: fungible_allocations(&t.assignments),
-        metadata: meta_entries(&t.metadata),
+        metadata: t
+            .metadata
+            .iter()
+            .map(|(ty, value)| MetaEntry {
+                meta_type: ty.to_inner(),
+                value_hex: to_hex(value.as_ref()),
+            })
+            .collect(),
         globals: global_entries(&t.globals),
     }
 }

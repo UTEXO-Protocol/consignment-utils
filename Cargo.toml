@@ -11,7 +11,8 @@ amplify = { version = "=4.8.1", default-features = false }
 clap = { version = "4.5.4", features = ["derive"] }
 env_logger = "0.11.3"
 log = "0.4.21"
-# Exact pins: a caret requirement never moves onto a newer prerelease.
+# Exact pins keep the RGB crate versions rgb-lib 3f571ac and the enclave decode
+# with, so a newer prerelease cannot change the strict encoding under us.
 rgb-ops = { version = "=0.11.2-rc.1", default-features = false, features = [
     "serde",
 ] }

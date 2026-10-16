@@ -64,7 +64,7 @@ pub struct GenesisInfo {
     pub issuer: String,
     /// RGB fast-forward version code (display form, e.g. `RGB/1.0`).
     pub ffv: String,
-    /// Number of global state entries declared at genesis.
+    /// Number of global state types declared at genesis (not values).
     pub global_state_count: u32,
     /// Number of asset-tag declarations (one per fungible state type).
     pub assignment_count: u32,
@@ -122,7 +122,8 @@ pub struct FungibleEntry {
 pub enum SealInfo {
     /// Concrete `txid:vout`. `txid` is `None` when the seal points at the
     /// witness tx of its bundle: the `WitnessInfo` holding the transition,
-    /// or for a terminal the one whose `bundle_id` matches.
+    /// or for a terminal one with the same `bundle_id`. Nothing is validated,
+    /// so that can match more than one `WitnessInfo`.
     Revealed {
         #[serde(skip_serializing_if = "Option::is_none")]
         txid: Option<String>,
@@ -175,7 +176,8 @@ pub struct GlobalEntry {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TerminalInfo {
-    /// Bundle id (hex), the key of the matching `WitnessInfo.bundle_id`.
+    /// Bundle id (hex), as in `WitnessInfo.bundle_id`; unvalidated input can repeat
+    /// a bundle, so more than one `WitnessInfo` may match.
     pub bundle_id: String,
     /// Terminal seals of this bundle: concealed for blinded receives,
     /// revealed for witness-vout ones.

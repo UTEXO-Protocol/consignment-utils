@@ -134,6 +134,45 @@ func TestGlobalOnceRejectsMalformedHex(t *testing.T) {
 	}
 }
 
+func TestGenesisGlobalOnceReturnsTheOnlyValue(t *testing.T) {
+	g := GenesisInfo{Globals: []GlobalEntry{
+		{GlobalType: 2000, ValueHex: "00"},
+		{GlobalType: 3008, ValueHex: "0001"},
+	}}
+	b, err := g.GlobalOnce(3008)
+	if err != nil || len(b) != 2 || b[1] != 0x01 {
+		t.Fatalf("GlobalOnce(3008) = %x, err=%v", b, err)
+	}
+}
+
+func TestGenesisGlobalOnceRejectsRepeatedType(t *testing.T) {
+	g := GenesisInfo{ContractID: "rgb:c", Globals: []GlobalEntry{
+		{GlobalType: 3008, ValueHex: "00"},
+		{GlobalType: 3008, ValueHex: "01"},
+	}}
+	b, err := g.GlobalOnce(3008)
+	if err == nil || !strings.Contains(err.Error(), "genesis rgb:c: global 3008 appears 2 times") {
+		t.Fatalf("two bridgeLocation values must be rejected, got %x, err=%v", b, err)
+	}
+	if errors.Is(err, ErrGlobalNotFound) {
+		t.Fatalf("a repeat is not a missing global: %v", err)
+	}
+}
+
+func TestGenesisGlobalOnceReportsMissingType(t *testing.T) {
+	g := GenesisInfo{ContractID: "rgb:c", Globals: []GlobalEntry{{GlobalType: 2000, ValueHex: "00"}}}
+	if _, err := g.GlobalOnce(3008); !errors.Is(err, ErrGlobalNotFound) {
+		t.Fatalf("err = %v, want ErrGlobalNotFound", err)
+	}
+}
+
+func TestGenesisGlobalOnceRejectsMalformedHex(t *testing.T) {
+	g := GenesisInfo{Globals: []GlobalEntry{{GlobalType: 3008, ValueHex: "zz"}}}
+	if b, err := g.GlobalOnce(3008); err == nil || errors.Is(err, ErrGlobalNotFound) {
+		t.Fatalf("malformed hex must fail as such, got %x, err=%v", b, err)
+	}
+}
+
 func TestGlobalRejectsMalformedHex(t *testing.T) {
 	tr := TransitionInfo{Globals: []GlobalEntry{{GlobalType: 2015, ValueHex: "zz"}}}
 	if b, ok := tr.Global(2015); ok {

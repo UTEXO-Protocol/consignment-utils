@@ -5,8 +5,8 @@ transfer / burn transitions with their fungible allocations, metadata and
 global state, terminals and witness transactions.
 
 Built on RGB **0.11.2-rc.1** (`rgb-ops =0.11.2-rc.1`, `rgb-strict-types
-=1.0.5`, `amplify =4.8.1`, the versions rgb-lib's `bfa` release uses). It
-reads its V1 containers:
+=1.0.5`, `amplify =4.8.1`, the versions the RGB-Tools BFA release of rgb-lib,
+`rgb-tools-devs/rgb-lib` commit `3f571ac`, locks). It reads its V1 containers:
 
 | Magic | Container | Written by rgb-lib as |
 |---|---|---|
@@ -50,19 +50,22 @@ Each transition carries its `Metadata []MetaEntry` and `Globals
 []GlobalEntry`, and genesis its `Globals`, as raw strict-encoded bytes in
 lowercase hex. `Meta(metaType)` and `Global(globalType)` return the decoded
 bytes of the first value of that type. Nothing is validated, so a crafted
-transition can repeat a global the schema caps at one: read those with
-`GlobalOnce`, which fails on a repeat and wraps `ErrGlobalNotFound` when absent.
+genesis or transition can repeat a global the schema caps at one: read those
+with `GlobalOnce`, which fails on a repeat and wraps `ErrGlobalNotFound` when
+absent.
 
 ```go
 burnedAsset, err := burn.GlobalOnce(2015) // u64 LE
 burnReason, err := burn.GlobalOnce(3009)  // 32 raw bytes, no length prefix
 afterBlock, ok := mint.Meta(1003)         // u64 LE
-location, ok := info.Genesis.Global(3008)
+location, err := info.Genesis.GlobalOnce(3008)
 ```
 
 A revealed seal without a `txid` points into its bundle's witness tx. For a
 transition seal that is the enclosing `WitnessInfo`; for a terminal seal it is
-the `WitnessInfo` whose `BundleID` equals the terminal's `BundleID`.
+a `WitnessInfo` whose `BundleID` equals the terminal's `BundleID`. The parser
+keeps every bundle and the bundle id does not depend on the witness tx, so
+unvalidated input can match more than one `WitnessInfo`.
 
 BFA ids in rgb-schemas 0.11.2-rc.1 (`src/lib.rs`):
 

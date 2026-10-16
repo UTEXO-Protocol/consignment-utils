@@ -10,7 +10,8 @@ on:
 # and those archives are committed so that `go get` works without a Rust
 # toolchain. `libs` rebuilds all four whenever the Rust side changes and
 # `commit-libs` pushes them back to the branch; `test` runs against whatever
-# archive is committed.
+# archive is committed, so `libs` tests (native) or links (cross) each archive
+# before uploading it.
 
 jobs:
   test:
@@ -37,10 +38,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # cross: the Go env that links the second, cross-built target.
           - os: ubuntu-24.04
             targets: "x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu"
+            cross: "GOARCH=arm64 CC=aarch64-linux-gnu-gcc"
           - os: macos-15
             targets: "aarch64-apple-darwin x86_64-apple-darwin"
+            cross: "GOARCH=amd64"
     runs-on: ${{ matrix.os }}
     # Both legs see the same commit, so either one's answer is the job's.
     outputs:
@@ -68,7 +72,7 @@ jobs:
         name: Cross toolchain for aarch64
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
           {
             echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc"
             echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc"
@@ -87,6 +91,12 @@ jobs:
         name: Build archives
         run: |
           for t in ${{ matrix.targets }}; do ./scripts/build-lib.sh "$t"; done
+      # The cross-built archive cannot run here, so it is only linked.
+      - if: steps.rust.outputs.any_changed == 'true'
+        name: Test the native archive, link the cross-built one
+        run: |
+          go test ./rgbconsignment
+          env CGO_ENABLED=1 ${{ matrix.cross }} go test -c -o /dev/null ./rgbconsignment
       - if: steps.rust.outputs.any_changed == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -113,19 +123,26 @@ jobs:
           pattern: libs-*
           path: rgbconsignment/lib
           merge-multiple: true
-      - name: Check the archives are intact
+      # Names all four archives, so a missing artifact fails here instead of
+      # reaching the commit as a deleted archive.
+      - name: Check all four archives arrived intact
         run: |
-          python3 - rgbconsignment/lib/*/librgb_consignment.a <<'PY'
+          python3 - rgbconsignment/lib/{darwin,linux}_{amd64,arm64}/librgb_consignment.a <<'PY'
+          import os
           import sys
+
           for path in sys.argv[1:]:
+              assert os.path.exists(path), f"{path}: missing, its libs artifact did not arrive"
               data = open(path, "rb").read()
               assert data[:8] == b"!<arch>\n", f"{path}: not an ar archive"
-              off = 8
+              off, size = 8, 0
               while off < len(data):
                   assert off + 60 <= len(data) and data[off + 58:off + 60] == b"`\n", f"{path}: bad member header at {off}"
-                  off += 60 + int(data[off + 48:off + 58].strip() or 0)
-                  off += off % 2
-              assert off in (len(data), len(data) + 1), f"{path}: member runs past the end"
+                  size = int(data[off + 48:off + 58].strip() or 0)
+                  off += 60 + size + size % 2
+              # Only an odd-sized last member may drop its padding byte.
+              assert off == len(data) or (size % 2 and off == len(data) + 1), \
+                  f"{path}: archive ends at {len(data)}, its members at {off}"
               print(path, "ok")
           PY
       - name: Commit rebuilt archives

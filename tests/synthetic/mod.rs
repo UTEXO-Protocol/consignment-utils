@@ -131,7 +131,7 @@ fn mint_transition(genesis: &Genesis) -> Transition {
         TS_MINT,
         metadata,
         globals,
-        Opout::new(genesis.id(), at(OS_MINT), 0),
+        Opout::new(genesis.id(), AssignmentType::with(OS_MINT), 0),
         seal,
         MINTED,
     )
@@ -146,7 +146,7 @@ fn burn_transition(genesis: &Genesis, mint: OpId, change: GraphSeal) -> Transiti
         &BurnReason::from(Bytes32::from_byte_array(burn_reason())),
     );
     let seal = BuilderSeal::Concealed(change.to_secret_seal());
-    let input = Opout::new(mint, at(OS_ASSET), 0);
+    let input = Opout::new(mint, AssignmentType::with(OS_ASSET), 0);
     transition(
         genesis,
         TS_BURN,
@@ -178,7 +178,7 @@ fn transition(
         globals,
         inputs: Inputs::from(NonEmptyOrdSet::with(input)),
         assignments: Assignments::from(
-            Confined::try_from(BTreeMap::from([(at(OS_ASSET), typed)])).unwrap(),
+            Confined::try_from(BTreeMap::from([(AssignmentType::with(OS_ASSET), typed)])).unwrap(),
         ),
         signature: None,
     }
@@ -212,8 +212,4 @@ fn add_global(globals: &mut GlobalState, global_type: u16, value: &impl StrictSe
 
 fn blob(value: &impl StrictSerialize) -> SmallBlob {
     value.to_strict_serialized::<U16>().unwrap()
-}
-
-fn at(assignment_type: u16) -> AssignmentType {
-    AssignmentType::with(assignment_type)
 }

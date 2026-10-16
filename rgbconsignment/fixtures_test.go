@@ -64,9 +64,9 @@ func TestParseFileBFAContract(t *testing.T) {
 
 func TestBFAGenesisBridgeLocation(t *testing.T) {
 	g := parseFixture(t, bfaFixture).Genesis
-	location, ok := g.Global(gsBridgeLoc)
-	if !ok {
-		t.Fatal("bridgeLocation global missing")
+	location, err := g.GlobalOnce(gsBridgeLoc)
+	if err != nil {
+		t.Fatal(err)
 	}
 	// BridgeLocation::Evm: union tag 0, chain id (u64 LE), 20-byte address.
 	if len(location) != 29 || location[0] != 0 {

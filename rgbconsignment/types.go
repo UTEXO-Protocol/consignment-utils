@@ -56,8 +56,15 @@ type GenesisInfo struct {
 }
 
 // Global returns the raw bytes of the first genesis value of globalType, if present.
+// It does not notice repeats; use GlobalOnce for a type the schema caps at one.
 func (g GenesisInfo) Global(globalType uint16) ([]byte, bool) {
 	return firstGlobal(g.Globals, globalType)
+}
+
+// GlobalOnce returns the raw bytes of the only genesis value of globalType, with
+// the same rules and errors as TransitionInfo.GlobalOnce.
+func (g GenesisInfo) GlobalOnce(globalType uint16) ([]byte, error) {
+	return onlyGlobal("genesis "+g.ContractID, g.Globals, globalType)
 }
 
 type FungibleAllocation struct {
@@ -134,30 +141,35 @@ func (t TransitionInfo) Global(globalType uint16) ([]byte, bool) {
 	return firstGlobal(t.Globals, globalType)
 }
 
-// ErrGlobalNotFound reports a transition without a value of the requested global type.
+// ErrGlobalNotFound reports an operation without a value of the requested global type.
 var ErrGlobalNotFound = errors.New("global not found")
 
 // GlobalOnce returns the raw bytes of the only value of globalType. It fails on a
 // repeat because the parser does not validate the schema's Once / NoneOrOnce rule.
 func (t TransitionInfo) GlobalOnce(globalType uint16) ([]byte, error) {
+	return onlyGlobal("transition "+t.OpID, t.Globals, globalType)
+}
+
+// onlyGlobal backs both GlobalOnce methods; op names the operation in errors.
+func onlyGlobal(op string, globals []GlobalEntry, globalType uint16) ([]byte, error) {
 	var values []string
-	for _, g := range t.Globals {
+	for _, g := range globals {
 		if g.GlobalType == globalType {
 			values = append(values, g.ValueHex)
 		}
 	}
 	switch len(values) {
 	case 0:
-		return nil, fmt.Errorf("transition %s: global %d: %w", t.OpID, globalType, ErrGlobalNotFound)
+		return nil, fmt.Errorf("%s: global %d: %w", op, globalType, ErrGlobalNotFound)
 	case 1:
 		b, err := hex.DecodeString(values[0])
 		if err != nil {
-			return nil, fmt.Errorf("transition %s: global %d is not valid hex: %w", t.OpID, globalType, err)
+			return nil, fmt.Errorf("%s: global %d is not valid hex: %w", op, globalType, err)
 		}
 		return b, nil
 	default:
-		return nil, fmt.Errorf("transition %s: global %d appears %d times, the schema allows one",
-			t.OpID, globalType, len(values))
+		return nil, fmt.Errorf("%s: global %d appears %d times, the schema allows one",
+			op, globalType, len(values))
 	}
 }
 
@@ -176,7 +188,8 @@ func firstGlobal(globals []GlobalEntry, globalType uint16) ([]byte, bool) {
 
 // TerminalInfo lists the terminal seals of one bundle: concealed for blinded
 // receives, revealed for witness-vout ones. A revealed seal without a Txid sits
-// in the tx of the WitnessInfo with the same BundleID.
+// in the tx of a WitnessInfo with the same BundleID; nothing is validated, so
+// that can match more than one WitnessInfo.
 type TerminalInfo struct {
 	BundleID string `json:"bundle_id"`
 	Seals    []Seal `json:"seals"`
