@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use clap::Parser;
 use log::{debug, error};
 
-/// Parses an RGB consignment (Transfer / Contract / Kit) and writes a JSON
+/// Parses an RGB consignment (Transfer / Contract) and writes a JSON
 /// summary to stdout. With no path or `-`, reads bytes from stdin.
 #[derive(Parser)]
 #[command(name = "rgb-consignment", version, about, long_about = None)]

@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 /*
- * Parse a binary RGB consignment (Transfer / Contract / Kit).
+ * Parse a binary RGB consignment (Transfer / Contract, V1 container).
  *
  * On success returns a newly allocated JSON string and sets *err_out to NULL.
  * On failure returns NULL and *err_out is a newly allocated error message.

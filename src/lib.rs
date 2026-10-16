@@ -1,7 +1,7 @@
 //! RGB consignment kit.
 //!
-//! Accepts the binary container format produced by `rgb-std` / `rgb-lib`
-//! (`.rgb` files: Transfer, Contract, or Kit) and returns a flat
+//! Accepts the binary V1 containers produced by `rgb-ops` / `rgb-lib` on RGB
+//! 0.11.2 (Transfer or Contract, plain or validated) and returns a flat
 //! [`ConsignmentInfo`] summary suitable for serialization across language
 //! boundaries.
 //!
@@ -20,6 +20,6 @@ mod parse;
 
 pub use info::{
     ConsignmentInfo, ConsignmentKind, ContractInfo, FungibleAllocation, FungibleEntry, GenesisInfo,
-    KitInfo, MetaEntry, SealInfo, TerminalInfo, TransferInfo, TransitionInfo, WitnessInfo,
+    GlobalEntry, MetaEntry, SealInfo, TerminalInfo, TransferInfo, TransitionInfo, WitnessInfo,
 };
 pub use parse::{ParseError, parse};

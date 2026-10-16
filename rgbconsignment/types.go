@@ -1,6 +1,10 @@
 package rgbconsignment
 
-import "encoding/hex"
+import (
+	"encoding/hex"
+	"errors"
+	"fmt"
+)
 
 // Kind is the top-level consignment container type.
 type Kind string
@@ -8,26 +12,21 @@ type Kind string
 const (
 	KindTransfer Kind = "transfer"
 	KindContract Kind = "contract"
-	KindKit      Kind = "kit"
 )
 
 // Info is the flat summary returned by Parse. Transfer and Contract share
-// the same fields; Kit only fills Version / SchemaCount / ScriptCount /
-// TypesCount.
+// the same fields; a contract has no terminals or witnesses.
 //
 // Info is a decode target for the parser's JSON, not a wire format of its
-// own: fields the Rust side requires per kind are marked omitempty so one Go
-// struct can hold every kind, so re-marshaling an Info is not guaranteed to
-// deserialize back into the Rust ConsignmentInfo.
+// own: re-marshaling an Info is not guaranteed to deserialize back into the
+// Rust ConsignmentInfo.
 type Info struct {
 	Kind Kind `json:"kind"`
 
+	// Version is the container version, 1 for the V1 containers of RGB 0.11.2.
 	Version     uint8  `json:"version"`
-	SchemaID    string `json:"schema_id,omitempty"`
-	BundleCount uint32 `json:"bundle_count,omitempty"`
-	ScriptCount uint32 `json:"script_count"`
-	TypesCount  uint32 `json:"types_count"`
-	SchemaCount uint32 `json:"schema_count,omitempty"`
+	SchemaID    string `json:"schema_id"`
+	BundleCount uint32 `json:"bundle_count"`
 
 	Genesis   *GenesisInfo   `json:"genesis,omitempty"`
 	Terminals []TerminalInfo `json:"terminals,omitempty"`
@@ -36,7 +35,6 @@ type Info struct {
 
 func (i Info) IsTransfer() bool { return i.Kind == KindTransfer }
 func (i Info) IsContract() bool { return i.Kind == KindContract }
-func (i Info) IsKit() bool      { return i.Kind == KindKit }
 
 type GenesisInfo struct {
 	ContractID          string               `json:"contract_id"`
@@ -52,6 +50,21 @@ type GenesisInfo struct {
 	Ticker              *string              `json:"ticker,omitempty"`
 	Precision           *uint8               `json:"precision,omitempty"`
 	Details             *string              `json:"details,omitempty"`
+	// Globals is the global state declared at genesis, one entry per value
+	// (for BFA: bridgeLocation=3008).
+	Globals []GlobalEntry `json:"globals,omitempty"`
+}
+
+// Global returns the raw bytes of the first genesis value of globalType, if present.
+// It does not notice repeats; use GlobalOnce for a type the schema caps at one.
+func (g GenesisInfo) Global(globalType uint16) ([]byte, bool) {
+	return firstGlobal(g.Globals, globalType)
+}
+
+// GlobalOnce returns the raw bytes of the only genesis value of globalType, with
+// the same rules and errors as TransitionInfo.GlobalOnce.
+func (g GenesisInfo) GlobalOnce(globalType uint16) ([]byte, error) {
+	return onlyGlobal("genesis "+g.ContractID, g.Globals, globalType)
 }
 
 type FungibleAllocation struct {
@@ -85,9 +98,13 @@ type TransitionInfo struct {
 	InputCount          uint32               `json:"input_count"`
 	FungibleAllocations []FungibleAllocation `json:"fungible_allocations"`
 	// Metadata carries the transition's schema-defined metadata fields
-	// (for BFA: MS_BURNED_ASSET=1001, MS_BURN_RECIPIENT=1003) as raw
-	// strict-encoded bytes. Empty when the transition has none.
+	// (for a BFA mint: afterBlock=1003) as raw strict-encoded bytes. Empty
+	// when the transition has none.
 	Metadata []MetaEntry `json:"metadata,omitempty"`
+	// Globals carries the global state the transition commits, one entry
+	// per value (for a BFA burn: burnedAsset=2015, burnReason=3009). Empty
+	// when the transition has none.
+	Globals []GlobalEntry `json:"globals,omitempty"`
 }
 
 // MetaEntry is one metadata field of a transition.
@@ -111,13 +128,76 @@ func (t TransitionInfo) Meta(metaType uint16) ([]byte, bool) {
 	return nil, false
 }
 
+// GlobalEntry is one global state value of an operation.
+type GlobalEntry struct {
+	GlobalType uint16 `json:"global_type"`
+	// ValueHex is the raw strict-encoded value, lowercase hex without 0x.
+	ValueHex string `json:"value_hex"`
+}
+
+// Global returns the raw bytes of the first value of globalType, if present.
+// It does not notice repeats; use GlobalOnce for a type the schema caps at one.
+func (t TransitionInfo) Global(globalType uint16) ([]byte, bool) {
+	return firstGlobal(t.Globals, globalType)
+}
+
+// ErrGlobalNotFound reports an operation without a value of the requested global type.
+var ErrGlobalNotFound = errors.New("global not found")
+
+// GlobalOnce returns the raw bytes of the only value of globalType. It fails on a
+// repeat because the parser does not validate the schema's Once / NoneOrOnce rule.
+func (t TransitionInfo) GlobalOnce(globalType uint16) ([]byte, error) {
+	return onlyGlobal("transition "+t.OpID, t.Globals, globalType)
+}
+
+// onlyGlobal backs both GlobalOnce methods; op names the operation in errors.
+func onlyGlobal(op string, globals []GlobalEntry, globalType uint16) ([]byte, error) {
+	var values []string
+	for _, g := range globals {
+		if g.GlobalType == globalType {
+			values = append(values, g.ValueHex)
+		}
+	}
+	switch len(values) {
+	case 0:
+		return nil, fmt.Errorf("%s: global %d: %w", op, globalType, ErrGlobalNotFound)
+	case 1:
+		b, err := hex.DecodeString(values[0])
+		if err != nil {
+			return nil, fmt.Errorf("%s: global %d is not valid hex: %w", op, globalType, err)
+		}
+		return b, nil
+	default:
+		return nil, fmt.Errorf("%s: global %d appears %d times, the schema allows one",
+			op, globalType, len(values))
+	}
+}
+
+func firstGlobal(globals []GlobalEntry, globalType uint16) ([]byte, bool) {
+	for _, g := range globals {
+		if g.GlobalType == globalType {
+			b, err := hex.DecodeString(g.ValueHex)
+			if err != nil {
+				return nil, false
+			}
+			return b, true
+		}
+	}
+	return nil, false
+}
+
+// TerminalInfo lists the terminal seals of one bundle: concealed for blinded
+// receives, revealed for witness-vout ones. A revealed seal without a Txid sits
+// in the tx of a WitnessInfo with the same BundleID; nothing is validated, so
+// that can match more than one WitnessInfo.
 type TerminalInfo struct {
-	BundleID        string `json:"bundle_id"`
-	SecretSealCount uint32 `json:"secret_seal_count"`
+	BundleID string `json:"bundle_id"`
+	Seals    []Seal `json:"seals"`
 }
 
 type WitnessInfo struct {
 	Txid            string           `json:"txid"`
+	BundleID        string           `json:"bundle_id"`
 	TransitionCount uint32           `json:"transition_count"`
 	InputCount      uint32           `json:"input_count"`
 	Transitions     []TransitionInfo `json:"transitions"`
