@@ -10,26 +10,30 @@ import (
 	"testing"
 )
 
-// The contracts are the rgb-schemas 0.11.2-rc.1 examples. The transfer is
-// synthetic (built by tests/synthetic in the Rust crate): well formed V1, but
-// not produced by a release wallet and not valid against the chain.
+// tests/synthetic in the Rust crate builds the fixtures with the rgb-schemas
+// and rgb-ops revs of rgb-lib f3975623: the contracts are the rgb-schemas
+// examples, the transfer is well formed V1 but not valid against the chain.
 const (
-	bfaFixture      = "../testdata/bfa-contract.rgb"
-	ifaFixture      = "../testdata/ifa-contract.rgb"
-	transferFixture = "../testdata/bfa-transfer-synthetic.rgb"
-	legacyV0Fixture = "../testdata/legacy-v0-bfa-burn.rgb"
+	bfaFixture              = "../testdata/bfa-contract.rgb"
+	ifaFixture              = "../testdata/ifa-contract.rgb"
+	transferFixture         = "../testdata/bfa-transfer-synthetic.rgb"
+	legacyV0Fixture         = "../testdata/legacy-v0-bfa-burn.rgb"
+	legacyTerminalsContract = "../testdata/legacy-terminals-bfa-contract.rgb"
+	legacyTerminalsTransfer = "../testdata/legacy-terminals-bfa-transfer.rgb"
 )
 
-// BFA ids from rgb-schemas 0.11.2-rc.1 (src/lib.rs).
+// BFA ids from rgb-schemas aa1e7fd (src/lib.rs).
 const (
-	tsMint         uint16 = 8013
 	tsBurn         uint16 = 8010
+	tsMint         uint16 = 8013
+	tsPropagate    uint16 = 8014
+	tsTransfer     uint16 = 10000
 	osAsset        uint16 = 4000
 	gsIssuedSupply uint16 = 2010
 	gsBurnedAsset  uint16 = 2015
 	gsBridgeLoc    uint16 = 3008
 	gsBurnReason   uint16 = 3009
-	msAfterBlock   uint16 = 1003
+	msBeforeBlock  uint16 = 1003
 )
 
 func parseFixture(t testing.TB, path string) *Info {
@@ -47,17 +51,18 @@ func TestParseFileBFAContract(t *testing.T) {
 		t.Fatalf("kind/version = %q/%d, want contract/1", info.Kind, info.Version)
 	}
 	g := info.Genesis
-	strEq(t, "contract_id", g.ContractID, "rgb:UiDQRpwu-~dsy7ZH-raGXsnJ-UNiT13f-WbArf5m-jPeb8xU")
-	strEq(t, "schema_id", g.SchemaID, "rgb:sch:Ryl5eQZ3IHrU05e3AWdQZJR4FB5GvxZPy96cwhJiApc#amazon-norway-harris")
+	strEq(t, "contract_id", g.ContractID, "rgb:IP7rzsJ3-KTivsnR-lwYBS0E-dIKpPU8-OayQsVt-JI~hdCA")
+	strEq(t, "schema_id", g.SchemaID, "rgb:sch:HbLJ6SjvzVw~XTu6e~Iau6wIcxYsVTlSM7dRUn0DDo4#brave-type-culture")
 	strEq(t, "top-level schema_id", info.SchemaID, g.SchemaID)
 	strEq(t, "chain_net", g.ChainNet, "tb4")
-	if g.Name == nil || *g.Name != "Test asset" || g.Ticker == nil || *g.Ticker != "TEST" {
-		t.Errorf("name/ticker = %v/%v", g.Name, g.Ticker)
-	}
+	// BFA keeps its nominals as root-level globals; the ticker may be any Unicode.
+	strPtrEq(t, "name", g.Name, "Test asset")
+	strPtrEq(t, "ticker", g.Ticker, "₮EST")
+	strPtrEq(t, "details", g.Details, "Bridged test asset")
 	if g.Precision == nil || *g.Precision != 8 {
 		t.Errorf("precision = %v", g.Precision)
 	}
-	if len(g.FungibleAllocations) != 0 || len(info.Witnesses) != 0 || len(info.Terminals) != 0 {
+	if len(g.FungibleAllocations) != 0 || len(info.Witnesses) != 0 {
 		t.Errorf("BFA genesis must allocate no asset and a contract has no history: %+v", info)
 	}
 }
@@ -94,55 +99,79 @@ func TestParseFileIFAContractAllocations(t *testing.T) {
 	}
 }
 
-func TestParseSyntheticTransferMint(t *testing.T) {
+func TestParseSyntheticTransferPropagate(t *testing.T) {
 	info := parseFixture(t, transferFixture)
-	if !info.IsTransfer() || len(info.Witnesses) != 2 || info.BundleCount != 2 {
+	if !info.IsTransfer() || len(info.Witnesses) != 3 || info.BundleCount != 3 {
 		t.Fatalf("kind=%q witnesses=%d bundles=%d", info.Kind, len(info.Witnesses), info.BundleCount)
 	}
-	mint := info.Witnesses[0].Transitions[0]
+	propagate := info.Witnesses[0].Transitions[0]
+	if propagate.TransitionType != tsPropagate || len(propagate.FungibleAllocations) != 0 {
+		t.Errorf("propagate = %+v, want TS_PROPAGATE moving only declarative rights", propagate)
+	}
+}
+
+func TestParseSyntheticTransferMint(t *testing.T) {
+	mint := parseFixture(t, transferFixture).Witnesses[1].Transitions[0]
 	if mint.TransitionType != tsMint {
 		t.Fatalf("transition type = %d, want TS_MINT", mint.TransitionType)
 	}
 	expectU64(t, "issuedSupply", mint.Global, gsIssuedSupply, 1000)
-	expectU64(t, "afterBlock", mint.Meta, msAfterBlock, 42)
+	expectU64(t, "beforeBlock", mint.Meta, msBeforeBlock, 42)
 	if len(mint.FungibleAllocations) != 1 || mint.FungibleAllocations[0].Total != 1000 {
 		t.Errorf("mint allocations = %+v", mint.FungibleAllocations)
 	}
 }
 
-func TestParseSyntheticTransferBurn(t *testing.T) {
+func TestParseSyntheticTransferSplitThenBurn(t *testing.T) {
 	info := parseFixture(t, transferFixture)
-	burn := info.Witnesses[1].Transitions[0]
-	if burn.TransitionType != tsBurn {
-		t.Fatalf("transition type = %d, want TS_BURN", burn.TransitionType)
+	last := info.Witnesses[2]
+	if len(last.Transitions) != 2 || last.Transitions[0].TransitionType != tsTransfer ||
+		last.Transitions[1].TransitionType != tsBurn {
+		t.Fatalf("burn witness transitions = %+v, want TS_TRANSFER then TS_BURN", last.Transitions)
 	}
+	split, burn := last.Transitions[0], last.Transitions[1]
+
 	expectU64(t, "burnedAsset", burn.Global, gsBurnedAsset, 400)
 	reason, ok := burn.Global(gsBurnReason)
 	want := append(make([]byte, 12), bytes.Repeat([]byte{0xab}, 20)...)
 	if !ok || !bytes.Equal(reason, want) {
 		t.Errorf("burnReason = %x, ok=%v, want %x", reason, ok, want)
 	}
-	change := burn.FungibleAllocations[0].Entries[0]
-	if change.Amount != 600 || change.Seal.Kind != SealConfidential || change.Seal.SecretSeal == "" {
+	if len(burn.FungibleAllocations) != 0 || burn.InputCount != 1 {
+		t.Errorf("burn must spend one output and assign nothing: %+v", burn)
+	}
+
+	// The split pays the change and puts the burned part on the mint output the burn tx spends.
+	entries := split.FungibleAllocations[0].Entries
+	if len(entries) != 2 {
+		t.Fatalf("split entries = %+v", entries)
+	}
+	change, burned := entries[0], entries[1]
+	if change.Amount != 600 || change.Seal.Kind != SealRevealed || change.Seal.Txid != nil || change.Seal.Vout != 1 {
 		t.Errorf("change = %+v", change)
+	}
+	if burned.Amount != 400 || burned.Seal.Txid == nil || *burned.Seal.Txid != info.Witnesses[1].Txid {
+		t.Errorf("burned output = %+v, want it on the mint witness %s", burned, info.Witnesses[1].Txid)
 	}
 }
 
-func TestParseSyntheticTransferTerminals(t *testing.T) {
+// The bridge settles the one burn of the last witness and cites the mints of the history.
+func TestBurnConsignmentEndsInOneBurnAfterItsMint(t *testing.T) {
 	info := parseFixture(t, transferFixture)
-	if len(info.Terminals) != 1 || len(info.Terminals[0].Seals) != 2 {
-		t.Fatalf("terminals = %+v", info.Terminals)
+	last := len(info.Witnesses) - 1
+	var burnsInLast, mintsBefore int
+	for i, w := range info.Witnesses {
+		for _, tr := range w.Transitions {
+			if tr.TransitionType == tsBurn && i == last {
+				burnsInLast++
+			}
+			if tr.TransitionType == tsMint && i < last {
+				mintsBefore++
+			}
+		}
 	}
-	concealed, revealed := info.Terminals[0].Seals[0], info.Terminals[0].Seals[1]
-	if concealed.Kind != SealConfidential || revealed.Kind != SealRevealed || revealed.Vout != 2 {
-		t.Errorf("terminal seals = %+v / %+v", concealed, revealed)
-	}
-	change := info.Witnesses[1].Transitions[0].FungibleAllocations[0].Entries[0]
-	strEq(t, "concealed terminal", concealed.SecretSeal, change.Seal.SecretSeal)
-	// The revealed terminal has no txid: it lives in the burn bundle's witness tx.
-	strEq(t, "terminal bundle", info.Terminals[0].BundleID, info.Witnesses[1].BundleID)
-	if info.Witnesses[0].BundleID == info.Witnesses[1].BundleID {
-		t.Errorf("mint and burn witnesses share bundle id %s", info.Witnesses[0].BundleID)
+	if burnsInLast != 1 || mintsBefore != 1 {
+		t.Errorf("burns in the last witness = %d, mints before it = %d, want 1 and 1", burnsInLast, mintsBefore)
 	}
 }
 
@@ -150,6 +179,15 @@ func TestParseRejectsLegacyV0Transfer(t *testing.T) {
 	_, err := ParseFile(filepath.FromSlash(legacyV0Fixture))
 	if err == nil || !strings.Contains(err.Error(), "ConsignmentVer") {
 		t.Fatalf("legacy V0 transfer must be rejected on its version, got err=%v", err)
+	}
+}
+
+func TestParseRejectsTerminalsLayout(t *testing.T) {
+	for _, path := range []string{legacyTerminalsContract, legacyTerminalsTransfer} {
+		_, err := ParseFile(filepath.FromSlash(path))
+		if err == nil || !strings.Contains(err.Error(), "V1 with history terminals") {
+			t.Errorf("%s: a pre-f3975623 V1 file must be rejected as such, got err=%v", path, err)
+		}
 	}
 }
 
@@ -193,4 +231,13 @@ func strEq(t *testing.T, what, got, want string) {
 	if got != want {
 		t.Errorf("%s = %q, want %q", what, got, want)
 	}
+}
+
+func strPtrEq(t *testing.T, what string, got *string, want string) {
+	t.Helper()
+	if got == nil {
+		t.Errorf("%s = nil, want %q", what, want)
+		return
+	}
+	strEq(t, what, *got, want)
 }
