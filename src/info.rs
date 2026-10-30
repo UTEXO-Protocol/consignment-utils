@@ -32,8 +32,6 @@ pub struct TransferInfo {
     pub genesis: GenesisInfo,
     /// Schema identifier (baid64), the one genesis commits to.
     pub schema_id: String,
-    /// History terminal seal bundles.
-    pub terminals: Vec<TerminalInfo>,
     /// Witness transactions referenced by bundles.
     pub witnesses: Vec<WitnessInfo>,
     /// Total number of transition bundles in the consignment.
@@ -45,7 +43,6 @@ pub struct ContractInfo {
     pub version: u8,
     pub genesis: GenesisInfo,
     pub schema_id: String,
-    pub terminals: Vec<TerminalInfo>,
     pub witnesses: Vec<WitnessInfo>,
     pub bundle_count: u32,
 }
@@ -72,13 +69,14 @@ pub struct GenesisInfo {
     /// For an NIA asset this is the issuance breakdown: `total` is the
     /// total supply.
     pub fungible_allocations: Vec<FungibleAllocation>,
-    /// Asset name. Decoded from `GS_NOMINAL`'s `AssetSpec` (NIA/IFA/PFA/BFA)
-    /// or from `GS_NAME` directly (CFA). `None` when the schema doesn't carry
-    /// either, or decoding failed.
+    /// Asset name. Decoded from `GS_NOMINAL`'s `AssetSpec` (NIA/IFA/PFA/UDA)
+    /// or from `GS_NAME` directly (CFA/BFA). `None` when the schema doesn't
+    /// carry either, or decoding failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// Asset ticker / symbol. Decoded from `GS_NOMINAL`'s `AssetSpec`. `None`
-    /// for schemas without a ticker (e.g. CFA) or when decoding failed.
+    /// Asset ticker / symbol. Decoded from `GS_NOMINAL`'s `AssetSpec`, or for
+    /// BFA from the `UnicodeTicker` in `GS_TICKER`. `None` for schemas without
+    /// a ticker (e.g. CFA) or when decoding failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ticker: Option<String>,
     /// Asset precision (number of decimal places in the asset's smallest
@@ -121,9 +119,7 @@ pub struct FungibleEntry {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SealInfo {
     /// Concrete `txid:vout`. `txid` is `None` when the seal points at the
-    /// witness tx of its bundle: the `WitnessInfo` holding the transition,
-    /// or for a terminal one with the same `bundle_id`. Nothing is validated,
-    /// so that can match more than one `WitnessInfo`.
+    /// witness tx of its bundle, the `WitnessInfo` holding the transition.
     Revealed {
         #[serde(skip_serializing_if = "Option::is_none")]
         txid: Option<String>,
@@ -145,7 +141,7 @@ pub struct TransitionInfo {
     /// moves declarative or structured (non-fungible) state.
     pub fungible_allocations: Vec<FungibleAllocation>,
     /// Schema-defined metadata carried by the transition (e.g. BFA mint
-    /// `afterBlock` = 1003), raw strict-encoded bytes as lowercase hex.
+    /// `beforeBlock` = 1003), raw strict-encoded bytes as lowercase hex.
     /// Empty when there is none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metadata: Vec<MetaEntry>,
@@ -175,16 +171,6 @@ pub struct GlobalEntry {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TerminalInfo {
-    /// Bundle id (hex), as in `WitnessInfo.bundle_id`; unvalidated input can repeat
-    /// a bundle, so more than one `WitnessInfo` may match.
-    pub bundle_id: String,
-    /// Terminal seals of this bundle: concealed for blinded receives,
-    /// revealed for witness-vout ones.
-    pub seals: Vec<SealInfo>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WitnessInfo {
     /// Bitcoin txid the bundle commits to.
     pub txid: String,
@@ -192,7 +178,8 @@ pub struct WitnessInfo {
     pub bundle_id: String,
     /// Number of state transitions in the bundle.
     pub transition_count: u32,
-    /// Number of inputs referenced from the witness tx.
+    /// Number of opouts the bundle's transitions spend (its input map), an
+    /// output of another transition of the bundle included, e.g. a burn's split.
     pub input_count: u32,
     /// State transitions in this bundle, with their fungible outputs.
     pub transitions: Vec<TransitionInfo>,
@@ -223,7 +210,6 @@ mod tests {
                 globals: vec![],
             },
             schema_id: "s".into(),
-            terminals: vec![],
             witnesses: vec![],
             bundle_count: 0,
         });
@@ -232,6 +218,18 @@ mod tests {
         assert!(json.contains(r#""ticker":"TKN""#), "{json}");
         assert!(!json.contains("details"), "{json}");
         assert!(!json.contains("globals"), "{json}");
+    }
+
+    // The Go TestConfidentialSealDecodesWithItsSecret decodes this JSON.
+    #[test]
+    fn confidential_seal_json_names_its_secret() {
+        let seal = SealInfo::Confidential {
+            secret_seal: "utxob:secret".into(),
+        };
+        assert_eq!(
+            serde_json::to_string(&seal).unwrap(),
+            r#"{"kind":"confidential","secret_seal":"utxob:secret"}"#
+        );
     }
 
     fn bare_transition() -> TransitionInfo {
