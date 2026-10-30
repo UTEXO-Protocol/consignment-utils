@@ -5,9 +5,10 @@ transfer / burn transitions with their fungible allocations, metadata and
 global state, and witness transactions.
 
 Built on RGB **0.11.2-rc.1** at the revs `rgb-tools-devs/rgb-lib` commit
-`f3975623` patches in (`rgb-consensus 4a614b72`, `rgb-ops 9d831d2`,
-`rgb-schemas aa1e7fd`, the strict encoding / types revs; see
-`[patch.crates-io]` in `Cargo.toml`). It reads the V1 containers they write:
+`1ae1c160` patches in (`rgb-consensus af0b751d`, `rgb-ops ed1d60d`,
+`rgb-schemas 641a06f`, the strict encoding / types revs; see
+`[patch.crates-io]` in `Cargo.toml`). It reads the V1 containers they write,
+in the same layout as rgb-lib `f3975623`:
 
 | Magic | Container | Written by rgb-lib as |
 |---|---|---|
@@ -16,9 +17,10 @@ Built on RGB **0.11.2-rc.1** at the revs `rgb-tools-devs/rgb-lib` commit
 | `RGB\0VTF` | Validated transfer | `*.valid.rgbc` |
 | `RGB\0VCO` | Validated contract | the issued asset file `assets/<asset_id>` |
 
-The validated containers append their validation status as JSON; it is not
-read. Legacy V0 consignments (RGB 0.11.1 and older) and schema definition
-files (`SD2`) are rejected. So are V1 files in the layout with history
+The validated containers append their validation status as JSON (since
+`1ae1c160` its DAG key is `opsDag`, was `dagDataOpt`); it is not read.
+Legacy V0 consignments (RGB 0.11.1 and older) and schema definition files
+(`SD2`) are rejected. So are V1 files in the layout with history
 terminals that rgb-ops dropped in `596d3cb` without a version bump (e.g.
 written by rgb-lib before `f3975623`): they fail with
 `ParseError::LegacyTerminals` instead of an unrelated decode error. A V1
@@ -95,7 +97,7 @@ A consignment no longer names its beneficiaries (rgb-ops `596d3cb` dropped the
 terminals): a receiver finds what it is paid by matching its own seals against
 the `FungibleEntry` seals.
 
-BFA ids in rgb-schemas `aa1e7fd` (`src/lib.rs`):
+BFA ids in rgb-schemas `641a06f` (`src/lib.rs`):
 
 | Id | Name | Value layout |
 |---|---|---|
@@ -103,9 +105,11 @@ BFA ids in rgb-schemas `aa1e7fd` (`src/lib.rs`):
 | 8014 | `TS_PROPAGATE` | spends one `mintRight`, assigns one or more |
 | 8010 | `TS_BURN` | no assignments; globals `burnedAsset` 2015 (u64 LE), `burnReason` 3009 (32 bytes), both optional |
 | 10000 | `TS_TRANSFER` | |
+| 8012 | `TS_LINK` | spends the `linkRight`; global `linkedToContract` 2014 |
 | 8016 | `TS_TRANSFER_LINK` | moves the `linkRight` |
 | 4000 | `OS_ASSET` | fungible |
 | 4013 | `OS_MINT` | declarative (`mintRight`) |
+| 4012 | `OS_LINK` | declarative (`linkRight`), at most one, issued at genesis |
 | 3008 | `GS_BRIDGE_LOCATION` | genesis: tag `00` (Evm), chain id u64 LE, 20-byte address |
 | 3001, 3004, 3005, 3011 | `GS_NAME`, `GS_DETAILS`, `GS_PRECISION`, `GS_TICKER` | genesis nominals, reported as `Name`, `Details`, `Precision`, `Ticker` |
 
@@ -166,14 +170,18 @@ dev-dependency) and `rgb-ops`:
 - `testdata/{bfa,ifa,cfa}-contract.rgb` are issued and validated by the
   rgb-ops contract builder with the inputs of the `rgb-schemas` examples
   (`examples/{bfa,ifa,cfa}.rs`, Apache-2.0; the BFA one also sets `details`),
-  in `VCO` containers. The `test/*-example.rgb` files in `rgb-schemas aa1e7fd`
+  in `VCO` containers. The `test/*-example.rgb` files in `rgb-schemas 641a06f`
   are stale (the layout with terminals, and older BFA and IFA schema ids),
   hence the rebuild.
 - `testdata/bfa-transfer-synthetic.rgb` is a BFA burn transfer shaped as
-  rgb-lib `f3975623` composes one: a `TS_PROPAGATE` of a genesis right, a
-  `TS_MINT` spending it, then one bundle with the split `TS_TRANSFER` and the
-  `TS_BURN`. Its anchors are dummies: it exercises the parser, not
-  validation, and is no substitute for transfers produced by a release wallet.
+  rgb-lib `1ae1c160` composes one: a `TS_PROPAGATE` of a genesis right, a
+  `TS_MINT` spending a right it made, then one bundle with the split
+  `TS_TRANSFER` and the `TS_BURN`. Each witness tx spends the seals its bundle
+  closes and commits the bundle in an OP_RETURN (opret, MPC), the way the
+  enclave-signer test generator does, so the pinned rgb-ops validates it
+  (`synthetic_transfer_passes_pinned_validation_with_its_ops_dag`) with those
+  txs as witnesses and the mint confirmed. No chain holds the txs, and it is
+  built in process, not by a release wallet.
 
 After changing the builder, regenerate them with
 `cargo test --test fixtures regenerate_fixtures -- --ignored`;

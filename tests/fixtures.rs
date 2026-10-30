@@ -1,8 +1,7 @@
 //! End-to-end tests over V1 consignment files.
 //!
-//! `synthetic` builds every fixture in `testdata/` except the legacy ones, with
-//! the rgb-schemas and rgb-ops revs rgb-lib f3975623 uses. No release-produced
-//! transfer exists yet, so the BFA transfer is synthetic.
+//! `synthetic` builds every non-legacy fixture in `testdata/` with the rgb-lib 1ae1c160
+//! revs; the BFA transfer is built in process, not by a wallet, and validates.
 
 mod synthetic;
 
@@ -16,7 +15,7 @@ use rgb_consignment::{
     ConsignmentInfo, ConsignmentKind, ContractInfo, GlobalEntry, MetaEntry, ParseError, SealInfo,
     TransferInfo, parse,
 };
-use rgbstd::rgbcore::validation::Status;
+use rgbstd::validation::Validity;
 use schemata::BFA_SCHEMA_ID;
 
 const BFA_CONTRACT: &[u8] = include_bytes!("../testdata/bfa-contract.rgb");
@@ -234,10 +233,21 @@ fn terminals_layout_transfer_is_rejected_as_legacy() {
 }
 
 #[test]
+fn synthetic_transfer_passes_pinned_validation_with_its_ops_dag() {
+    let built = synthetic::build();
+    let status = synthetic::validate(&built.transfer, built.mint).expect("transfer validates");
+    assert_eq!(status.validity(), Validity::Valid, "{status}");
+    // Genesis and four transitions, each spending one output of the previous.
+    let dag = status.ops_dag.expect("BFA validation builds the ops DAG");
+    assert_eq!((dag.node_count(), dag.edge_count()), (5, 4));
+}
+
+#[test]
 fn validated_transfer_container_parses_like_plain_one() {
     let built = synthetic::build();
     let plain = synthetic::file_bytes(&built.transfer);
-    let validated = synthetic::validated_file_bytes(&built.transfer, &Status::default());
+    let status = synthetic::validate(&built.transfer, built.mint).unwrap();
+    let validated = synthetic::validated_file_bytes(&built.transfer, &status);
     assert_eq!(&validated[..7], b"RGB\x00VTF");
     assert_eq!(
         serde_json::to_value(transfer(&validated)).unwrap(),
@@ -323,7 +333,7 @@ fn synthetic_mint_exposes_issued_supply_and_before_block() {
         allocation.entries[0].seal,
         SealInfo::Revealed {
             txid: None,
-            vout: 0
+            vout: 1
         }
     ));
 }
@@ -370,7 +380,7 @@ fn split_sends_change_and_puts_the_burned_part_on_the_spent_outpoint() {
     // The burn tx spends the mint output, and the split assigns to that outpoint.
     let mint_txid = &t.witnesses[1].txid;
     assert!(
-        matches!(on_spent, SealInfo::Revealed { txid: Some(txid), vout: 0 } if txid == mint_txid),
+        matches!(on_spent, SealInfo::Revealed { txid: Some(txid), vout: 1 } if txid == mint_txid),
         "{on_spent:?}"
     );
     assert!(

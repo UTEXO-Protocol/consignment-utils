@@ -1058,7 +1058,7 @@ dependencies = [
 [[package]]
 name = "rgb-consensus"
 version = "0.11.2-rc.1"
-source = "git+ssh://git@github.com/rgb-tools-devs/rgb-consensus.git?rev=4a614b72#4a614b72cf9d5fdca4f293ab529a7e342717021a"
+source = "git+ssh://git@github.com/rgb-tools-devs/rgb-consensus.git?rev=af0b751d#af0b751dc9e51547cd57e025fdc3508e120ddf8a"
 dependencies = [
  "amplify",
  "baid64",
@@ -1100,7 +1100,7 @@ dependencies = [
 [[package]]
 name = "rgb-invoicing"
 version = "0.11.2-rc.1"
-source = "git+ssh://git@github.com/rgb-tools-devs/rgb-ops.git?rev=9d831d2#9d831d2f75b076a0f9574678341f3b262a4a7e16"
+source = "git+ssh://git@github.com/rgb-tools-devs/rgb-ops.git?rev=ed1d60d#ed1d60df69f9e4db65640c0ac61a5779ba9c018c"
 dependencies = [
  "amplify",
  "baid64",
@@ -1117,7 +1117,7 @@ dependencies = [
 [[package]]
 name = "rgb-ops"
 version = "0.11.2-rc.1"
-source = "git+ssh://git@github.com/rgb-tools-devs/rgb-ops.git?rev=9d831d2#9d831d2f75b076a0f9574678341f3b262a4a7e16"
+source = "git+ssh://git@github.com/rgb-tools-devs/rgb-ops.git?rev=ed1d60d#ed1d60df69f9e4db65640c0ac61a5779ba9c018c"
 dependencies = [
  "amplify",
  "baid64",
@@ -1137,7 +1137,7 @@ dependencies = [
 [[package]]
 name = "rgb-schemas"
 version = "0.11.2-rc.1"
-source = "git+ssh://git@github.com/rgb-tools-devs/rgb-schemas.git?rev=aa1e7fd#aa1e7fd20b33237a020bc37daa71f631e4657fca"
+source = "git+ssh://git@github.com/rgb-tools-devs/rgb-schemas.git?rev=641a06f#641a06f31cd277c42222504c8040055c8cbafca5"
 dependencies = [
  "amplify",
  "rgb-aluvm",
