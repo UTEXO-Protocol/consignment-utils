@@ -12,6 +12,9 @@ on:
 # `commit-libs` pushes them back to the branch; `test` runs against whatever
 # archive is committed, so `libs` tests (native) or links (cross) each archive
 # before uploading it.
+#
+# The RGB crates are pinned to private rgb-tools-devs repos (Cargo.toml
+# [patch.crates-io]); jobs running cargo map them to our mirrors first.
 
 jobs:
   test:
@@ -20,8 +23,19 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
+    env:
+      # Fetch with the git CLI, which reads the insteadOf mapping below.
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - uses: actions/checkout@v4
+      # Before rust-cache too: it runs cargo metadata, which fetches the git deps.
+      - name: Map the private RGB deps to our mirrors
+        env:
+          TOKEN: ${{ secrets.RGB_PRIVATE_DEPS_TOKEN }}
+        run: |
+          for r in rgb-consensus rgb-ops rgb-api rgb-schemas; do
+            git config --global url."https://x-access-token:${TOKEN}@github.com/UTEXO-Protocol/${r}-s-bfa.git".insteadOf "ssh://git@github.com/rgb-tools-devs/${r}.git"
+          done
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-go@v5
@@ -46,6 +60,8 @@ jobs:
             targets: "aarch64-apple-darwin x86_64-apple-darwin"
             cross: "GOARCH=amd64"
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     # Both legs see the same commit, so either one's answer is the job's.
     outputs:
       built: ${{ steps.rust.outputs.any_changed }}
@@ -60,6 +76,14 @@ jobs:
             Cargo.lock
             scripts/build-lib.sh
             .github/workflows/ci.yml
+      - if: steps.rust.outputs.any_changed == 'true'
+        name: Map the private RGB deps to our mirrors
+        env:
+          TOKEN: ${{ secrets.RGB_PRIVATE_DEPS_TOKEN }}
+        run: |
+          for r in rgb-consensus rgb-ops rgb-api rgb-schemas; do
+            git config --global url."https://x-access-token:${TOKEN}@github.com/UTEXO-Protocol/${r}-s-bfa.git".insteadOf "ssh://git@github.com/rgb-tools-devs/${r}.git"
+          done
       - if: steps.rust.outputs.any_changed == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:

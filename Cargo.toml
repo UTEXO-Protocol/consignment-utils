@@ -11,11 +11,12 @@ amplify = { version = "=4.8.1", default-features = false }
 clap = { version = "4.5.4", features = ["derive"] }
 env_logger = "0.11.3"
 log = "0.4.21"
-# Exact pins keep the RGB crate versions rgb-lib 3f571ac and the enclave decode
-# with, so a newer prerelease cannot change the strict encoding under us.
+# Exact pins plus [patch.crates-io] keep the RGB crates rgb-lib 1ae1c160
+# decodes with, so a newer prerelease cannot change the strict encoding under us.
 rgb-ops = { version = "=0.11.2-rc.1", default-features = false, features = [
     "serde",
 ] }
+rgb-schemas = { version = "=0.11.2-rc.1", default-features = false }
 rgb-strict-types = "=1.0.5"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.115"
@@ -40,6 +41,10 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+# Builds the test fixtures with the schemas rgb-lib issues and transfers under.
+rgb-schemas.workspace = true
+
 [[bin]]
 name = "rgb-consignment"
 required-features = ["cli"]
@@ -57,3 +62,13 @@ strip = "debuginfo"
 [profile.lib]
 inherits = "release"
 lto = "thin"
+
+# The revs of rgb-lib 1ae1c160's root [patch.crates-io]. The rgb-tools-devs
+# repos are private: CI maps them to our mirrors (.github/workflows/ci.yml).
+[patch.crates-io]
+rgb-consensus = { git = "ssh://git@github.com/rgb-tools-devs/rgb-consensus.git", rev = "af0b751d" }
+rgb-ops = { git = "ssh://git@github.com/rgb-tools-devs/rgb-ops.git", rev = "ed1d60d" }
+rgb-schemas = { git = "ssh://git@github.com/rgb-tools-devs/rgb-schemas.git", rev = "641a06f" }
+rgb-strict-encoding = { git = "https://github.com/rgb-protocol/rgb-strict-encoding", rev = "e12b9944b30171950de03778d6666b24bc33d994" }
+rgb-strict-encoding-derive = { git = "https://github.com/rgb-protocol/rgb-strict-encoding", rev = "e12b9944b30171950de03778d6666b24bc33d994" }
+rgb-strict-types = { git = "https://github.com/rgb-protocol/rgb-strict-types", rev = "8714cdcc8af25333c27214cdf9f42a6388d484ff" }

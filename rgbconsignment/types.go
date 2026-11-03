@@ -15,7 +15,7 @@ const (
 )
 
 // Info is the flat summary returned by Parse. Transfer and Contract share
-// the same fields; a contract has no terminals or witnesses.
+// the same fields; a contract has no witnesses.
 //
 // Info is a decode target for the parser's JSON, not a wire format of its
 // own: re-marshaling an Info is not guaranteed to deserialize back into the
@@ -28,9 +28,8 @@ type Info struct {
 	SchemaID    string `json:"schema_id"`
 	BundleCount uint32 `json:"bundle_count"`
 
-	Genesis   *GenesisInfo   `json:"genesis,omitempty"`
-	Terminals []TerminalInfo `json:"terminals,omitempty"`
-	Witnesses []WitnessInfo  `json:"witnesses,omitempty"`
+	Genesis   *GenesisInfo  `json:"genesis,omitempty"`
+	Witnesses []WitnessInfo `json:"witnesses,omitempty"`
 }
 
 func (i Info) IsTransfer() bool { return i.Kind == KindTransfer }
@@ -98,7 +97,7 @@ type TransitionInfo struct {
 	InputCount          uint32               `json:"input_count"`
 	FungibleAllocations []FungibleAllocation `json:"fungible_allocations"`
 	// Metadata carries the transition's schema-defined metadata fields
-	// (for a BFA mint: afterBlock=1003) as raw strict-encoded bytes. Empty
+	// (for a BFA mint: beforeBlock=1003) as raw strict-encoded bytes. Empty
 	// when the transition has none.
 	Metadata []MetaEntry `json:"metadata,omitempty"`
 	// Globals carries the global state the transition commits, one entry
@@ -186,19 +185,12 @@ func firstGlobal(globals []GlobalEntry, globalType uint16) ([]byte, bool) {
 	return nil, false
 }
 
-// TerminalInfo lists the terminal seals of one bundle: concealed for blinded
-// receives, revealed for witness-vout ones. A revealed seal without a Txid sits
-// in the tx of a WitnessInfo with the same BundleID; nothing is validated, so
-// that can match more than one WitnessInfo.
-type TerminalInfo struct {
-	BundleID string `json:"bundle_id"`
-	Seals    []Seal `json:"seals"`
-}
-
 type WitnessInfo struct {
-	Txid            string           `json:"txid"`
-	BundleID        string           `json:"bundle_id"`
-	TransitionCount uint32           `json:"transition_count"`
-	InputCount      uint32           `json:"input_count"`
-	Transitions     []TransitionInfo `json:"transitions"`
+	Txid            string `json:"txid"`
+	BundleID        string `json:"bundle_id"`
+	TransitionCount uint32 `json:"transition_count"`
+	// InputCount is the number of opouts the bundle's transitions spend, an
+	// output of another transition of the bundle included (a burn's split).
+	InputCount  uint32           `json:"input_count"`
+	Transitions []TransitionInfo `json:"transitions"`
 }

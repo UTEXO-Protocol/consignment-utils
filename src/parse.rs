@@ -1,32 +1,42 @@
 use amplify::Wrapper;
-use amplify::confinement::U32 as FILE_MAX_LEN;
-use rgbstd::containers::{Consignment, WitnessBundle};
-use rgbstd::stl::{AssetSpec, Details, Name};
+use amplify::confinement::{LargeVec, NonEmptyVec, U16, U32 as FILE_MAX_LEN};
+use rgbstd::containers::{Consignment, ConsignmentVer, WitnessBundle};
+use rgbstd::stl::{AssetSpec, Details, Name, UnicodeTicker};
 use rgbstd::{
-    Assign, Assignments, BuilderSeal, ExposedSeal, Genesis, GlobalState, GlobalStateType,
-    KnownTransition, Operation, Precision, RevealedValue, TypedAssigns,
+    Assign, Assignments, BuilderSeal, BundleId, ExposedSeal, Genesis, GlobalState, GlobalStateType,
+    GraphSeal, KnownTransition, Operation, Precision, RevealedValue, TypedAssigns,
 };
-use strict_types::encoding::{StreamReader, StrictDecode, StrictDeserialize};
+use strict_types::encoding::{
+    DecodeError, StreamReader, StrictDecode, StrictDeserialize, StrictReader,
+};
 
 use crate::info::{
     ConsignmentInfo, ContractInfo, FungibleAllocation, FungibleEntry, GenesisInfo, GlobalEntry,
-    MetaEntry, SealInfo, TerminalInfo, TransferInfo, TransitionInfo, WitnessInfo,
+    MetaEntry, SealInfo, TransferInfo, TransitionInfo, WitnessInfo,
 };
 
-// Well-known global-state-type IDs from `rgb-schemas`.
-// Inlined to avoid pulling the full schemas crate as a dep.
-const GS_NOMINAL: u16 = 2000; // RGBContract.AssetSpec (NIA / IFA / PFA / UDA / BFA)
-const GS_NAME: u16 = 3001; // RGBContract.Name (CFA)
-const GS_DETAILS: u16 = 3004; // RGBContract.Details
-const GS_PRECISION: u16 = 3005; // RGBContract.Precision
+// Well-known global-state-type IDs from `rgb-schemas`, inlined to keep it a
+// dev-dependency; inlined_global_ids_match_rgb_schemas ties them to it.
+const GS_NOMINAL: u16 = 2000; // RGBContract.AssetSpec (NIA / IFA / PFA / UDA)
+const GS_NAME: u16 = 3001; // RGBContract.Name (CFA / BFA)
+const GS_DETAILS: u16 = 3004; // RGBContract.Details (CFA / BFA)
+const GS_PRECISION: u16 = 3005; // RGBContract.Precision (CFA / BFA)
+const GS_TICKER: u16 = 3011; // RGBBridge.UnicodeTicker (BFA)
 
 const RGB_PREFIX: &[u8] = b"RGB\x00";
 const MAGIC_LEN: usize = 3;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
+    /// The bytes are not a consignment this parser reads.
     #[error("not a valid RGB consignment file: {0}")]
     Decode(String),
+    /// A V1 consignment in the layout rgb-ops used before 596d3cb.
+    #[error(
+        "unsupported RGB consignment layout: V1 with history terminals, written with rgb-ops \
+         before 596d3cb (e.g. by rgb-lib before f3975623)"
+    )]
+    LegacyTerminals,
 }
 
 /// Parse a binary consignment file into a flat summary.
@@ -51,8 +61,13 @@ pub fn parse(bytes: &[u8]) -> Result<ConsignmentInfo, ParseError> {
 // The validated copies append their validation status as JSON, which is not read.
 fn load<const TRANSFER: bool>(body: &[u8]) -> Result<Consignment<TRANSFER>, ParseError> {
     let reader = StreamReader::new::<FILE_MAX_LEN>(body);
-    let consignment = Consignment::<TRANSFER>::strict_read(reader)
-        .map_err(|e| ParseError::Decode(e.to_string()))?;
+    let consignment = Consignment::<TRANSFER>::strict_read(reader).map_err(|e| {
+        if read_terminals_layout(body).is_ok() {
+            ParseError::LegacyTerminals
+        } else {
+            ParseError::Decode(e.to_string())
+        }
+    })?;
     if consignment.transfer != TRANSFER {
         return Err(ParseError::Decode(
             "container type does not match the consignment transfer flag".into(),
@@ -61,12 +76,27 @@ fn load<const TRANSFER: bool>(body: &[u8]) -> Result<Consignment<TRANSFER>, Pars
     Ok(consignment)
 }
 
+// rgb-ops 596d3cb dropped the terminals map after the transfer flag without a
+// version bump, so an older file misreads with an unrelated error.
+fn read_terminals_layout(body: &[u8]) -> Result<(), DecodeError> {
+    let mut reader = StrictReader::with(StreamReader::new::<FILE_MAX_LEN>(body));
+    ConsignmentVer::strict_decode(&mut reader)?;
+    bool::strict_decode(&mut reader)?;
+    // SmallOrdMap<BundleId, TerminalSeals>: a u16 count, then the entries.
+    for _ in 0..u16::strict_decode(&mut reader)? {
+        BundleId::strict_decode(&mut reader)?;
+        NonEmptyVec::<BuilderSeal<GraphSeal>, U16>::strict_decode(&mut reader)?;
+    }
+    Genesis::strict_decode(&mut reader)?;
+    LargeVec::<WitnessBundle>::strict_decode(&mut reader)?;
+    Ok(())
+}
+
 fn transfer_info(c: &Consignment<true>) -> TransferInfo {
     TransferInfo {
         version: u8::from(c.version),
         genesis: genesis_info(&c.genesis),
         schema_id: c.schema_id().to_string(),
-        terminals: terminal_infos(c),
         witnesses: c.bundles.iter().map(witness_info).collect(),
         bundle_count: c.bundles.len() as u32,
     }
@@ -77,20 +107,9 @@ fn contract_info(c: &Consignment<false>) -> ContractInfo {
         version: u8::from(c.version),
         genesis: genesis_info(&c.genesis),
         schema_id: c.schema_id().to_string(),
-        terminals: terminal_infos(c),
         witnesses: c.bundles.iter().map(witness_info).collect(),
         bundle_count: c.bundles.len() as u32,
     }
-}
-
-fn terminal_infos<const TRANSFER: bool>(c: &Consignment<TRANSFER>) -> Vec<TerminalInfo> {
-    c.terminals
-        .iter()
-        .map(|(bundle_id, seals)| TerminalInfo {
-            bundle_id: bundle_id.to_string(),
-            seals: seals.iter().map(seal_info).collect(),
-        })
-        .collect()
 }
 
 fn witness_info(wb: &WitnessBundle) -> WitnessInfo {
@@ -138,7 +157,7 @@ struct AssetMeta {
 }
 
 impl AssetMeta {
-    // AssetSpec carries all four fields; CFA keeps them as separate globals.
+    // AssetSpec carries all four fields; CFA and BFA keep them as separate globals.
     fn from_globals(globals: &GlobalState) -> Self {
         if let Some(spec) = decode_global::<AssetSpec>(globals, GS_NOMINAL) {
             return Self {
@@ -150,7 +169,7 @@ impl AssetMeta {
         }
         Self {
             name: decode_global::<Name>(globals, GS_NAME).map(|n| n.to_string()),
-            ticker: None,
+            ticker: decode_global::<UnicodeTicker>(globals, GS_TICKER).map(|t| t.to_string()),
             precision: decode_global::<Precision>(globals, GS_PRECISION).map(Precision::decimals),
             details: decode_global::<Details>(globals, GS_DETAILS).map(|d| d.to_string()),
         }
@@ -242,6 +261,9 @@ fn seal_info<Seal: ExposedSeal>(seal: &BuilderSeal<Seal>) -> SealInfo {
 
 #[cfg(test)]
 mod tests {
+    use rgbstd::Transition;
+    use strict_types::encoding::StrictDumb;
+
     use super::*;
 
     #[test]
@@ -267,5 +289,43 @@ mod tests {
     #[test]
     fn hex_is_lowercase_without_prefix() {
         assert_eq!(to_hex(&[0x00, 0xab, 0x10]), "00ab10");
+    }
+
+    #[test]
+    fn inlined_global_ids_match_rgb_schemas() {
+        let ids = [GS_NOMINAL, GS_NAME, GS_DETAILS, GS_PRECISION, GS_TICKER];
+        let schemata = [
+            schemata::GS_NOMINAL,
+            schemata::GS_NAME,
+            schemata::GS_DETAILS,
+            schemata::GS_PRECISION,
+            schemata::GS_TICKER,
+        ];
+        assert_eq!(ids, schemata.map(|ty| ty.to_inner()));
+    }
+
+    #[test]
+    fn concealed_seal_reports_its_secret() {
+        let seal = GraphSeal::with_blinded_vout(1, 7);
+        let info = seal_info(&BuilderSeal::<GraphSeal>::Concealed(seal.to_secret_seal()));
+        let SealInfo::Confidential { secret_seal } = info else {
+            panic!("expected a confidential seal, got {info:?}");
+        };
+        assert_eq!(secret_seal, seal.to_secret_seal().to_string());
+    }
+
+    #[test]
+    fn transition_types_unknown_to_the_parser_are_reported_by_number() {
+        let new_types = [
+            schemata::TS_PROPAGATE,
+            schemata::TS_TRANSFER_INFLATION,
+            schemata::TS_TRANSFER_LINK,
+        ];
+        for ty in new_types {
+            let mut transition = Transition::strict_dumb();
+            transition.transition_type = ty;
+            let info = transition_info(&KnownTransition::new(transition.id(), transition));
+            assert_eq!(info.transition_type, ty.to_inner());
+        }
     }
 }

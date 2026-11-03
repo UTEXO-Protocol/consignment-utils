@@ -27,11 +27,11 @@ func TestJSONKinds(t *testing.T) {
 		kind Kind
 	}{
 		{
-			raw:  `{"kind":"transfer","version":1,"schema_id":"s","bundle_count":0,"genesis":{"contract_id":"c","schema_id":"s","chain_net":"bc","timestamp":1,"issuer":"","ffv":"RGB/1.0","global_state_count":0,"assignment_count":0,"fungible_allocations":[]},"terminals":[],"witnesses":[]}`,
+			raw:  `{"kind":"transfer","version":1,"schema_id":"s","bundle_count":0,"genesis":{"contract_id":"c","schema_id":"s","chain_net":"bc","timestamp":1,"issuer":"","ffv":"RGB/1.0","global_state_count":0,"assignment_count":0,"fungible_allocations":[]},"witnesses":[]}`,
 			kind: KindTransfer,
 		},
 		{
-			raw:  `{"kind":"contract","version":1,"schema_id":"s","bundle_count":0,"genesis":{"contract_id":"c","schema_id":"s","chain_net":"bc","timestamp":1,"issuer":"","ffv":"RGB/1.0","global_state_count":0,"assignment_count":0,"fungible_allocations":[]},"terminals":[],"witnesses":[]}`,
+			raw:  `{"kind":"contract","version":1,"schema_id":"s","bundle_count":0,"genesis":{"contract_id":"c","schema_id":"s","chain_net":"bc","timestamp":1,"issuer":"","ffv":"RGB/1.0","global_state_count":0,"assignment_count":0,"fungible_allocations":[]},"witnesses":[]}`,
 			kind: KindContract,
 		},
 	}
@@ -47,6 +47,18 @@ func TestJSONKinds(t *testing.T) {
 	}
 }
 
+// The JSON is the one Rust confidential_seal_json_names_its_secret pins.
+func TestConfidentialSealDecodesWithItsSecret(t *testing.T) {
+	raw := `{"amount":400,"seal":{"kind":"confidential","secret_seal":"utxob:secret"}}`
+	var e FungibleEntry
+	if err := json.Unmarshal([]byte(raw), &e); err != nil {
+		t.Fatal(err)
+	}
+	if e.Seal.Kind != SealConfidential || e.Seal.SecretSeal != "utxob:secret" || e.Seal.Txid != nil {
+		t.Fatalf("seal = %+v", e.Seal)
+	}
+}
+
 func TestTransitionMetadataDecodesAndLooksUp(t *testing.T) {
 	raw := `{"op_id":"op","transition_type":8013,"input_count":1,"fungible_allocations":[],` +
 		`"metadata":[{"meta_type":1003,"value_hex":"2a00000000000000"}]}`
@@ -54,9 +66,9 @@ func TestTransitionMetadataDecodesAndLooksUp(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &tr); err != nil {
 		t.Fatal(err)
 	}
-	afterBlock, ok := tr.Meta(1003)
-	if !ok || len(afterBlock) != 8 || afterBlock[0] != 0x2a {
-		t.Fatalf("afterBlock bytes = %x, ok=%v", afterBlock, ok)
+	beforeBlock, ok := tr.Meta(1003)
+	if !ok || len(beforeBlock) != 8 || beforeBlock[0] != 0x2a {
+		t.Fatalf("beforeBlock bytes = %x, ok=%v", beforeBlock, ok)
 	}
 	if _, ok := tr.Meta(9999); ok {
 		t.Fatal("unknown meta type must not be found")

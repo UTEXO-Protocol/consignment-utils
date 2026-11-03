@@ -20,6 +20,6 @@ mod parse;
 
 pub use info::{
     ConsignmentInfo, ConsignmentKind, ContractInfo, FungibleAllocation, FungibleEntry, GenesisInfo,
-    GlobalEntry, MetaEntry, SealInfo, TerminalInfo, TransferInfo, TransitionInfo, WitnessInfo,
+    GlobalEntry, MetaEntry, SealInfo, TransferInfo, TransitionInfo, WitnessInfo,
 };
 pub use parse::{ParseError, parse};
