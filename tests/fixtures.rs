@@ -114,7 +114,7 @@ fn bfa_contract_reports_root_level_nominals() {
     let g = &c.genesis;
     assert_eq!(
         g.contract_id,
-        "rgb:IP7rzsJ3-KTivsnR-lwYBS0E-dIKpPU8-OayQsVt-JI~hdCA"
+        "rgb:JSqccq0p-QiJUDqb-L8_YNPV-BBAlm59-VqUXpo6-V~S2Ypo"
     );
     assert_eq!(g.schema_id, BFA_SCHEMA_ID.to_string());
     assert_eq!(c.schema_id, g.schema_id);
