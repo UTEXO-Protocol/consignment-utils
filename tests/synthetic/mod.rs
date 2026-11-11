@@ -13,7 +13,7 @@ use rgbstd::bitcoin::script::Builder;
 use rgbstd::bitcoin::transaction::Version;
 use rgbstd::bitcoin::{Amount as Sats, OutPoint, ScriptBuf, Transaction, TxIn, TxOut, WPubkeyHash};
 use rgbstd::containers::{
-    AnchorResolverError, ConsignmentVer, FileContent, ResolveAnchor, Transfer, ValidContract,
+    ClaimResolverError, ConsignmentVer, FileContent, ResolveClaim, Transfer, ValidContract,
     WitnessBundle,
 };
 use rgbstd::contract::{AllocatedState, ContractBuilder, IssuerWrapper, TransitionBuilder};
@@ -27,8 +27,7 @@ use rgbstd::stl::{
     EvmContract, Name, RejectListLocation, RejectListUrl, RicardianContract, UnicodeTicker,
 };
 use rgbstd::validation::{
-    DbcProof, ExternalAnchor, ResolveWitness, Status, ValidationConfig, WitnessResolverError,
-    WitnessStatus,
+    Claim, DbcProof, ResolveWitness, Status, ValidationConfig, WitnessResolverError, WitnessStatus,
 };
 use rgbstd::vm::WitnessOrd;
 use rgbstd::{
@@ -340,9 +339,21 @@ pub fn validate(transfer: &Transfer, mint: OpId) -> Result<Status, String> {
         .validate_deterministic(&rules, &config)
         .map_err(|e| format!("phase 1: {e}"))?;
     let location = BridgedFungibleAsset::bridge_location(&transfer.genesis).unwrap();
+    let witness_id = transfer
+        .bundles
+        .iter()
+        .find(|wb| wb.bundle.known_transitions.iter().any(|t| t.opid == mint))
+        .map(|wb| wb.tx.compute_txid())
+        .ok_or("the mint is in no bundle")?;
     pending
-        .resolve_all_anchors(location, &LockedMint(mint))
-        .map_err(|e| format!("mint anchor: {e}"))?;
+        .resolve_all_claims(
+            location,
+            &LockedMint {
+                opid: mint,
+                witness_id,
+            },
+        )
+        .map_err(|e| format!("mint claim: {e}"))?;
     let txs = transfer.bundles.iter().map(|wb| wb.tx.clone()).collect();
     pending
         .pending()
@@ -367,25 +378,26 @@ impl ResolveWitness for OwnWitnesses {
     }
 }
 
-/// The bridge's view: only the given mint of `MINTED` before `BEFORE_BLOCK` is locked.
-struct LockedMint(OpId);
+/// The bridge's view: only the given mint of `MINTED` in `witness_id`, before
+/// `BEFORE_BLOCK`, is locked.
+struct LockedMint {
+    opid: OpId,
+    witness_id: Txid,
+}
 
-impl ResolveAnchor for LockedMint {
-    fn evm_chain_id(&self) -> Result<u64, AnchorResolverError> {
+impl ResolveClaim for LockedMint {
+    fn evm_chain_id(&self) -> Result<u64, ClaimResolverError> {
         Ok(BRIDGE_CHAIN_ID)
     }
 
-    fn is_confirmed(
-        &self,
-        _: &BridgeLocation,
-        anchor: &ExternalAnchor,
-    ) -> Result<bool, AnchorResolverError> {
-        let locked = ExternalAnchor::Mint {
-            opid: self.0,
+    fn is_confirmed(&self, _: &BridgeLocation, claim: &Claim) -> Result<bool, ClaimResolverError> {
+        let locked = Claim::Lock {
+            opid: self.opid,
+            witness_id: self.witness_id,
             amount: MINTED,
             before_block: BEFORE_BLOCK,
         };
-        Ok(*anchor == locked)
+        Ok(*claim == locked)
     }
 }
 

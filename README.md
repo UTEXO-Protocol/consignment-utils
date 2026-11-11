@@ -4,9 +4,9 @@ Parses binary RGB consignment files into a flat summary: genesis, mint /
 transfer / burn transitions with their fungible allocations, metadata and
 global state, and witness transactions.
 
-Built on RGB **0.11.2-rc.1** at the revs `rgb-tools-devs/rgb-lib` commit
-`1ae1c160` patches in (`rgb-consensus af0b751d`, `rgb-ops ed1d60d`,
-`rgb-schemas 641a06f`, the strict encoding / types revs; see
+Built on RGB **0.11.2-rc.1** at the revs that `UTEXO-Protocol/rgb-lib-bfa` commit
+`5010eefa` patches in (`rgb-consensus d4bbbce2`, `rgb-ops 00f8d62e`,
+`rgb-schemas b3f88f28`, the strict encoding / types revs; see
 `[patch.crates-io]` in `Cargo.toml`). It reads the V1 containers they write,
 in the same layout as rgb-lib `f3975623`:
 
@@ -29,27 +29,6 @@ type system, so asset name, ticker, precision and details are decoded against
 the known `rgb-ops` types (`AssetSpec`, or the root-level `Name` /
 `Precision` / `Details` of CFA and BFA, plus the BFA `UnicodeTicker`);
 nothing is validated.
-
-The `rgb-tools-devs` repos are private. Locally, with HTTPS credentials for
-them, map the ssh URLs Cargo is given:
-
-```sh
-export CARGO_NET_GIT_FETCH_WITH_CLI=true GIT_CONFIG_COUNT=1 \
-  GIT_CONFIG_KEY_0=url.https://github.com/rgb-tools-devs/.insteadOf \
-  GIT_CONFIG_VALUE_0=ssh://git@github.com/rgb-tools-devs/
-```
-
-Without access to `rgb-tools-devs`, map them to our
-`UTEXO-Protocol/<repo>-s-bfa` mirrors instead, as CI does with the
-`RGB_PRIVATE_DEPS_TOKEN` secret:
-
-```sh
-export CARGO_NET_GIT_FETCH_WITH_CLI=true
-for r in rgb-consensus rgb-ops rgb-api rgb-schemas; do
-  git config --global url."https://github.com/UTEXO-Protocol/$r-s-bfa.git".insteadOf \
-    "ssh://git@github.com/rgb-tools-devs/$r.git"
-done
-```
 
 Three entry points share one parser:
 

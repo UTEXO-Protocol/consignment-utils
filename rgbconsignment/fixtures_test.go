@@ -50,8 +50,8 @@ func TestParseFileBFAContract(t *testing.T) {
 		t.Fatalf("kind/version = %q/%d, want contract/1", info.Kind, info.Version)
 	}
 	g := info.Genesis
-	strEq(t, "contract_id", g.ContractID, "rgb:IP7rzsJ3-KTivsnR-lwYBS0E-dIKpPU8-OayQsVt-JI~hdCA")
-	strEq(t, "schema_id", g.SchemaID, "rgb:sch:HbLJ6SjvzVw~XTu6e~Iau6wIcxYsVTlSM7dRUn0DDo4#brave-type-culture")
+	strEq(t, "contract_id", g.ContractID, "rgb:JSqccq0p-QiJUDqb-L8_YNPV-BBAlm59-VqUXpo6-V~S2Ypo")
+	strEq(t, "schema_id", g.SchemaID, "rgb:sch:3I0xZVEQnQxYVk7vDnh5uNtQyUfsmThw6dX9n_Gvb5o#mama-swing-album")
 	strEq(t, "top-level schema_id", info.SchemaID, g.SchemaID)
 	strEq(t, "chain_net", g.ChainNet, "tb4")
 	// BFA keeps its nominals as root-level globals; the ticker may be any Unicode.
