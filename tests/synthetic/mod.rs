@@ -1,4 +1,4 @@
-//! Builds the fixtures with the rgb-lib 1ae1c160 revs: the rgb-schemas example contracts,
+//! Builds the fixtures with the pinned RGB crates: the rgb-schemas example contracts,
 //! and a BFA transfer committing each bundle in an OP_RETURN, so it passes [`validate`].
 
 use std::collections::BTreeMap;
