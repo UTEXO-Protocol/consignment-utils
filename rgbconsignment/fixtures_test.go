@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// tests/synthetic in the Rust crate builds the fixtures with the rgb-lib 1ae1c160 revs: the
+// tests/synthetic in the Rust crate builds the fixtures with the pinned RGB crates: the
 // rgb-schemas example contracts, and a transfer valid against its own witness txs.
 const (
 	bfaFixture              = "../testdata/bfa-contract.rgb"
@@ -21,7 +21,7 @@ const (
 	legacyTerminalsTransfer = "../testdata/legacy-terminals-bfa-transfer.rgb"
 )
 
-// BFA ids from rgb-schemas 641a06f (src/lib.rs).
+// BFA ids from rgb-schemas 0.11.2-rc.2 (src/lib.rs).
 const (
 	tsBurn         uint16 = 8010
 	tsMint         uint16 = 8013

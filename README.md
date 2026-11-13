@@ -4,11 +4,11 @@ Parses binary RGB consignment files into a flat summary: genesis, mint /
 transfer / burn transitions with their fungible allocations, metadata and
 global state, and witness transactions.
 
-Built on RGB **0.11.2-rc.1** at the revs that `UTEXO-Protocol/rgb-lib-bfa` commit
-`5010eefa` patches in (`rgb-consensus d4bbbce2`, `rgb-ops 00f8d62e`,
-`rgb-schemas b3f88f28`, the strict encoding / types revs; see
-`[patch.crates-io]` in `Cargo.toml`). It reads the V1 containers they write,
-in the same layout as rgb-lib `f3975623`:
+Built on RGB **0.11.2-rc.2** from crates.io (`rgb-ops`, `rgb-schemas`, and
+`rgb-strict-types` 1.0.6), the versions the public `RGB-Tools/rgb-lib` commit
+`567e5b8` (0.3.0-beta.8) takes; see the exact pins in `Cargo.toml`.
+It reads the V1 containers they write, in the same layout as rgb-lib
+`f3975623`:
 
 | Magic | Container | Written by rgb-lib as |
 |---|---|---|
@@ -76,7 +76,7 @@ A consignment no longer names its beneficiaries (rgb-ops `596d3cb` dropped the
 terminals): a receiver finds what it is paid by matching its own seals against
 the `FungibleEntry` seals.
 
-BFA ids in rgb-schemas `641a06f` (`src/lib.rs`):
+BFA ids in rgb-schemas `0.11.2-rc.2` (`src/lib.rs`):
 
 | Id | Name | Value layout |
 |---|---|---|
@@ -150,8 +150,9 @@ dev-dependency) and `rgb-ops`:
   rgb-ops contract builder with the inputs of the `rgb-schemas` examples
   (`examples/{bfa,ifa,cfa}.rs`, Apache-2.0; the BFA one also sets `details`),
   in `VCO` containers. The `test/*-example.rgb` files in `rgb-schemas 641a06f`
-  are stale (the layout with terminals, and older BFA and IFA schema ids),
-  hence the rebuild.
+  were stale (the layout with terminals, and older BFA and IFA schema ids),
+  hence the rebuild; the IFA and CFA ones in `0.11.2-rc.2` equal these
+  fixtures byte for byte.
 - `testdata/bfa-transfer-synthetic.rgb` is a BFA burn transfer shaped as
   rgb-lib `1ae1c160` composes one: a `TS_PROPAGATE` of a genesis right, a
   `TS_MINT` spending a right it made, then one bundle with the split

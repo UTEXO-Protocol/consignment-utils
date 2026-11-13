@@ -1,7 +1,7 @@
 //! End-to-end tests over V1 consignment files.
 //!
-//! `synthetic` builds every non-legacy fixture in `testdata/` with the rgb-lib 1ae1c160
-//! revs; the BFA transfer is built in process, not by a wallet, and validates.
+//! `synthetic` builds every non-legacy fixture in `testdata/` with the pinned RGB
+//! crates; the BFA transfer is built in process, not by a wallet, and validates.
 
 mod synthetic;
 
